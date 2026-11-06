@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>it.eone.ewf</groupId>
+  <artifactId>ewf-sap</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <packaging>jar</packaging>
+  <name>eWF SAP connector</name>
+  <description>Handler del motore eWF verso SAP via JCo (/EWF/ENGINE_DISPATCH)</description>
+
+  <properties>
+    <maven.compiler.release>21</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>it.eone.ewf</groupId>
+      <artifactId>ewf-engine</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
+    <!-- Stesse coordinate del PoC (gia' nel repository Maven locale).
+         provided: a runtime JCo deve essere il sapjco3.jar ORIGINALE (non rinominato)
+         con la sua sapjco3.dll, es. nella lib di Tomcat. -->
+    <dependency>
+      <groupId>com.sap</groupId>
+      <artifactId>sapjco3</artifactId>
+      <version>3.1.12</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
+      </plugin>
+    </plugins>
+  </build>
+</project>
