@@ -1,0 +1,11 @@
+# Destinazione JCo per eWF - copiare come EWF_DEV.properties nella cartella indicata
+# da EWF_SAP_CONFIG_DIR (FUORI dal progetto e da Git).
+# La password NON va qui: variabile d'ambiente EWF_SAP_EWF_DEV_PASSWD
+# (EWF_SAP_<NOME DESTINAZIONE>_PASSWD).
+jco.client.ashost=sapdev.example.local
+jco.client.sysnr=00
+jco.client.client=100
+jco.client.user=EWF_RFC
+jco.client.lang=IT
+jco.destination.pool_capacity=3
+jco.destination.peak_limit=10

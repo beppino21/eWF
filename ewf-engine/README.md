@@ -31,6 +31,7 @@ Il progetto è compilato con `release 21`: il JAR gira su Java 21 e successivi
 |---|---|
 | `start` | `WF_START` |
 | `act` (OK / KO) | `WF_ACTION` + `WF_NEXT_STEP` |
+| `choose` / `options` / `choices` | nuovo (nodi di scelta, ex `WF_SELEZIONE_OPZIONE` + processi "fittizi") |
 | `move` | `WF_NEXT_STEP` con azione MOVE |
 | `claim` / `release` | nuovo (task di team) |
 | `retryCompletion` | nuovo (fine processo fallita) |
@@ -43,7 +44,7 @@ Il progetto è compilato con `release 21`: il JAR gira su Java 21 e successivi
 ## Regole del motore
 
 1. Lo stato lo cambia solo il motore. Gli handler restituiscono esito, documenti e
-   al massimo tre istruzioni: `SkipStep`, `SkipTask`, `SetValue`.
+   al massimo quattro istruzioni: `SkipStep`, `SkipTask`, `SetValue`, `SelectOption`.
 2. Gli handler non vengono mai chiamati dentro una transazione: il task passa a
    `EXECUTING`, si chiamano gli handler, poi si applica l'esito.
 3. Un'eccezione dell'handler vale `UNKNOWN`: il processo va in `ERROR` e il task resta
@@ -55,6 +56,45 @@ Il progetto è compilato con `release 21`: il JAR gira su Java 21 e successivi
    mai se il task è in carico a un altro; per OK/KO serve peso effettivo ≥ peso del task.
 7. Assegnatario non trovato, non mappato o non attivo → team di riserva
    (`EngineConfig.fallbackTeamCode`) + evento di audit. Nessun task resta senza titolare.
+
+## Documento: lettura all'avvio
+
+Per ogni tipo documento un `DocumentAdapter` (on-premise: `SapDocumentAdapter` → `/EWF/DOC_INFO`)
+dice se il documento esiste, quanto vale e i suoi attributi (divisione, societa', gruppo acquisti...).
+
+- Il motore lo legge **solo all'avvio** e salva valore e contesto sul processo (`doc_context`):
+  soglie e regole usano quella fotografia, senza richiamare SAP a ogni passo.
+- Documento inesistente o cancellato → avvio rifiutato (`DOCUMENT_NOT_FOUND`).
+  Sistema non raggiungibile → avvio rifiutato (`BACKEND_UNAVAILABLE`): nessun processo "alla cieca".
+- Un documento modificato in modo rilevante durante l'approvazione si gestisce con il **riavvio**,
+  che rilegge il documento *prima* di annullare il processo in corso.
+- Senza adapter per il tipo documento il processo parte senza verifica (audit `documentCheck=NO_ADAPTER`).
+
+## Nodi di scelta e rami
+
+Azioni sul task: **Approva**, **Respingi**, **Sposta**. Un task con opzioni è un **nodo di scelta**:
+Approva e Respingi non sono disponibili e l'utente deve scegliere un'opzione (`choose`); Sposta resta.
+
+- La definizione elenca tutti i rami: lo step N può esistere nel **tronco comune** (`option` vuota)
+  e in **varianti** legate a un'opzione. Arrivato allo step N, il motore usa la variante di
+  un'opzione scelta, altrimenti il tronco. I rami si ricongiungono puntando a uno step del tronco.
+- Ogni opzione prosegue come un'approvazione (next OK) o, se `reject`, come un rifiuto
+  (next KO; vuoto = fine negativa). Il rifiuto in un nodo è quindi un'opzione come le altre.
+- Le **scelte del processo** sono una per nodo: l'opzione dell'ultimo task chiuso su quel nodo.
+  Ripassando dal nodo, la nuova scelta sostituisce la precedente. I codici opzione sono univoci
+  nella versione.
+- Gli handler ricevono le scelte nei parametri: `EWF_OPTION` (opzione del task in corso),
+  `EWF_OPTIONS` (`20=RESO;40=CONT`). L'opzione può avere un handler proprio, eseguito alla scelta
+  prima degli agganci ON_OK/ON_KO del task.
+- **Instradamento automatico**: un handler `ON_ACTIVATE` del nodo restituisce `SelectOption(codice)`
+  (da SAP: `SELECT_OPTION=<codice>` in `ET_OUT`) e il nodo si decide da solo, con lo stesso percorso
+  di una scelta dell'utente. Un codice non previsto viene ignorato (audit) e il nodo aspetta l'utente.
+- Vincolo: un nodo di scelta ha **un solo task**.
+- **Validazione all'attivazione**: il motore percorre tutte le combinazioni di scelte e rifiuta la
+  versione se un ramo porta a uno step inesistente o se due varianti si sovrappongono; avvisa per
+  varianti mai raggiunte. Soglie d'importo e salti degli handler non sono considerati (possono solo
+  accorciare un percorso).
+- `preview` si ferma al primo nodo non ancora deciso.
 
 ## Test
 
@@ -91,7 +131,8 @@ paralleli chiusi insieme). Senza configurazione i test PostgreSQL vengono **salt
 Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`: mai usare `ewf`):
 
 1. in psql come `postgres`: `CREATE DATABASE ewf_test OWNER ewf_owner ENCODING 'UTF8' TEMPLATE template0;`
-2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.6.sql'`
+2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.9.sql'`
+   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.8_to_0.9.sql`)
 3. variabili d'ambiente (in Eclipse: *Run Configurations → scheda Environment*):
    `EWF_TEST_DB_URL=jdbc:postgresql://localhost:5432/ewf_test`,
    `EWF_TEST_DB_USER=ewf_owner`, `EWF_TEST_DB_PASSWORD=...`
@@ -99,8 +140,8 @@ Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`
 ## Database
 
 Cartella `db/`:
-- `ewf_schema_v0.6.sql` – schema completo per un DB nuovo;
-- `ewf_migrate_0.4_to_0.5.sql`, `ewf_migrate_0.5_to_0.6.sql` – migrazioni incrementali.
+- `ewf_schema_v0.9.sql` – schema completo per un DB nuovo;
+- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.9), da applicare in ordine.
 
 ## Limiti noti
 

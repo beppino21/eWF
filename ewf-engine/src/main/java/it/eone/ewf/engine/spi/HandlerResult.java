@@ -41,8 +41,10 @@ public record HandlerResult(
     }
 
     /** Le sole istruzioni che un handler puo' dare al motore. */
-    public sealed interface Directive permits SkipStep, SkipTask, SetValue {}
+    public sealed interface Directive permits SkipStep, SkipTask, SetValue, SelectOption {}
     public record SkipStep(int stepNo) implements Directive {}
     public record SkipTask() implements Directive {}
     public record SetValue(Money value) implements Directive {}
+    /** In ON_ACTIVATE di un nodo di scelta: sceglie l'opzione al posto dell'utente (instradamento automatico). */
+    public record SelectOption(String optionCode) implements Directive {}
 }

@@ -73,12 +73,15 @@ public final class JcoDispatcherHandler implements Handler {
         try {
             f.execute(dest);
         } catch (JCoException e) {
+            if (rejectedBeforeExecution(e))
+                return HandlerResult.ko("SAP ha rifiutato la chiamata (" + e.getKey() + "): " + e.getMessage());
             // la richiesta e' partita: non sappiamo se l'handler ha agito
             return HandlerResult.unknown("Errore durante la chiamata a " + functionName + ": " + e.getMessage());
         }
 
         JCoParameterList out = f.getExportParameterList();
         String status = out.getString("E_STATUS");
+        status = status == null ? "" : status.trim();
         String message = blankToNull(out.getString("E_MESSAGE"));
         boolean replayed = "X".equals(out.getString("E_REPLAYED"));
 
@@ -106,16 +109,30 @@ public final class JcoDispatcherHandler implements Handler {
             switch (name) {
                 case "SKIP_TASK" -> directives.add(new SkipTask());
                 case "SKIP_STEP" -> directives.add(new SkipStep(Integer.parseInt(value.trim())));
+                case "SELECT_OPTION" -> directives.add(new SelectOption(value.trim()));
                 default -> output.put(name, value);
             }
         }
 
-        HandlerResult.Status st = switch (status == null ? "" : status) {
+        HandlerResult.Status st = switch (status) {
             case "O" -> HandlerResult.Status.OK;
             case "K" -> HandlerResult.Status.KO;
             default -> HandlerResult.Status.UNKNOWN;
         };
+        if (st == HandlerResult.Status.UNKNOWN && !"U".equals(status))
+            message = "E_STATUS non riconosciuto: '" + status + "'" + (message == null ? "" : " - " + message);
         return new HandlerResult(st, message, docs, users, directives, output, replayed);
+    }
+
+    /**
+     * Errori con cui SAP rifiuta la chiamata prima di eseguire qualsiasi cosa:
+     * e' sicuro considerarli KO (nessuna azione avvenuta).
+     */
+    private static boolean rejectedBeforeExecution(JCoException e) {
+        if (e.getGroup() == JCoException.JCO_ERROR_LOGON_FAILURE) return true;
+        String key = e.getKey() == null ? "" : e.getKey();
+        return key.equals("CALL_FUNCTION_NOT_REMOTE") || key.equals("CALL_FUNCTION_NOT_FOUND")
+                || key.equals("FU_NOT_FOUND") || key.equals("RFC_NO_AUTHORITY");
     }
 
     /** Campi di /EWF/TASKRUN letti dalle FM legacy. */

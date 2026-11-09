@@ -122,6 +122,19 @@ class PostgresWorkflowEngineTest extends WorkflowEngineContract {
         }
     }
 
+    @Test
+    void versioneConUnRamoRottoNonSiAttivaEResterebbeInBozza() {
+        f.b.defineType(new ProcessType("ROTTO", "Ramo mancante", "GEN", false, false, false));
+        ProcessVersion good = f.ramiVersion(30);
+        // tolgo la variante 30/B: il ramo B non ha piu' dove andare
+        ProcessVersion broken = new ProcessVersion(31, "ROTTO", 1, null, good.steps().stream()
+                .filter(s -> !(s.stepNo() == 30 && "B".equals(s.option()))).toList());
+        it.eone.ewf.engine.jdbc.JdbcException e = assertThrows(it.eone.ewf.engine.jdbc.JdbcException.class,
+                () -> f.b.activate(broken));
+        assertTrue(e.getMessage().contains("{20=B}"), e.getMessage());
+        assertTrue(f.b.defs().activeVersion("ROTTO").isEmpty());
+    }
+
     /** Esegue due operazioni nello stesso istante; restituisce risultato o eccezione di ciascuna. */
     private static List<Object> race(Supplier<?> a, Supplier<?> b) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);

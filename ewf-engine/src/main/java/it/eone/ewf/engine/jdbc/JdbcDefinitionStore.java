@@ -62,7 +62,8 @@ public final class JdbcDefinitionStore implements DefinitionStore {
         cache.remove(versionId);
     }
 
-    private ProcessVersion load(long versionId) {
+    /** Lettura diretta, senza cache (usata anche dalla validazione delle bozze). */
+    ProcessVersion load(long versionId) {
         return db.with(c -> {
             String type;
             int versionNo;
@@ -78,6 +79,15 @@ public final class JdbcDefinitionStore implements DefinitionStore {
                     type = rs.getString(1);
                     versionNo = rs.getInt(2);
                     endHandler = rs.getString(3);
+                }
+            }
+            Map<String, String> endConfig = new LinkedHashMap<>();
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT e.key, e.value FROM ewf_core.process_version v "
+                    + "CROSS JOIN LATERAL jsonb_each_text(v.end_handler_config) e WHERE v.id = ?")) {
+                ps.setLong(1, versionId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) endConfig.put(rs.getString(1), rs.getString(2));
                 }
             }
 
@@ -121,6 +131,41 @@ public final class JdbcDefinitionStore implements DefinitionStore {
                 }
             }
 
+            Map<String, Map<String, String>> optionConfigs = new HashMap<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT o.task_def_id, o.option_code, e.key, e.value
+                      FROM ewf_core.task_option o
+                      JOIN ewf_core.task_def t ON t.id = o.task_def_id
+                      JOIN ewf_core.step_def s ON s.id = t.step_id
+                     CROSS JOIN LATERAL jsonb_each_text(o.config) e
+                     WHERE s.version_id = ?""")) {
+                ps.setLong(1, versionId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next())
+                        optionConfigs.computeIfAbsent(rs.getLong(1) + "|" + rs.getString(2), k -> new LinkedHashMap<>())
+                                .put(rs.getString(3), rs.getString(4));
+                }
+            }
+            Map<Long, List<OptionDef>> options = new HashMap<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT o.task_def_id, o.option_code, o.label, o.reject, h.code AS handler
+                      FROM ewf_core.task_option o
+                      JOIN ewf_core.task_def t ON t.id = o.task_def_id
+                      JOIN ewf_core.step_def s ON s.id = t.step_id
+                      LEFT JOIN ewf_core.handler h ON h.id = o.handler_id
+                     WHERE s.version_id = ?
+                     ORDER BY o.task_def_id, o.seq""")) {
+                ps.setLong(1, versionId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        options.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>()).add(new OptionDef(
+                                rs.getString("option_code"), rs.getString("label"), rs.getBoolean("reject"),
+                                rs.getString("handler"),
+                                optionConfigs.getOrDefault(rs.getLong(1) + "|" + rs.getString("option_code"), Map.of())));
+                    }
+                }
+            }
+
             Map<Long, List<TaskDef>> tasksByStep = new HashMap<>();
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT t.id, t.step_id, t.subop_no, t.text, t.role_code, t.required_weight,
@@ -141,7 +186,7 @@ public final class JdbcDefinitionStore implements DefinitionStore {
                                 rs.getString("assignee_handler"), rs.getBoolean("team_task"), rs.getString("team_code"),
                                 PreviewMode.valueOf(rs.getString("preview_mode")),
                                 Interaction.valueOf(rs.getString("interaction")), rs.getString("task_param"),
-                                hooks.getOrDefault(id, List.of())));
+                                hooks.getOrDefault(id, List.of()), options.getOrDefault(id, List.of())));
                     }
                 }
             }
@@ -149,8 +194,8 @@ public final class JdbcDefinitionStore implements DefinitionStore {
             List<StepDef> steps = new ArrayList<>();
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT id, step_no, is_first, join_policy, next_step_ok, next_step_ko,
-                           min_amount, min_amount_currency
-                      FROM ewf_core.step_def WHERE version_id = ? ORDER BY step_no""")) {
+                           min_amount, min_amount_currency, option_code
+                      FROM ewf_core.step_def WHERE version_id = ? ORDER BY step_no, option_code NULLS FIRST""")) {
                 ps.setLong(1, versionId);
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
@@ -158,11 +203,11 @@ public final class JdbcDefinitionStore implements DefinitionStore {
                                 JoinPolicy.valueOf(rs.getString("join_policy")),
                                 Sql.getInt(rs, "next_step_ok"), Sql.getInt(rs, "next_step_ko"),
                                 Sql.getMoney(rs, "min_amount", "min_amount_currency"),
-                                tasksByStep.getOrDefault(rs.getLong("id"), List.of())));
+                                tasksByStep.getOrDefault(rs.getLong("id"), List.of()), rs.getString("option_code")));
                     }
                 }
             }
-            return new ProcessVersion(versionId, type, versionNo, endHandler, steps);
+            return new ProcessVersion(versionId, type, versionNo, endHandler, endConfig, steps);
         });
     }
 }

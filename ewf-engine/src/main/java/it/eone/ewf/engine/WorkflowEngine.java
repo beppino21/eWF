@@ -4,6 +4,7 @@ import it.eone.ewf.engine.EngineException.Code;
 import it.eone.ewf.engine.Requests.*;
 import it.eone.ewf.engine.model.*;
 import it.eone.ewf.engine.spi.*;
+import it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo;
 import it.eone.ewf.engine.spi.HandlerContext.Actor;
 import it.eone.ewf.engine.spi.HandlerContext.ProcessRef;
 import it.eone.ewf.engine.spi.HandlerContext.TaskRef;
@@ -57,15 +58,46 @@ public final class WorkflowEngine {
     // =====================================================================
 
     public ProcessInstance start(Start req) {
-        ProcessType pt = defs.processType(req.processType())
-                .orElseThrow(() -> EngineException.of(Code.NOT_FOUND, "Tipo processo %s inesistente", req.processType()));
+        ProcessType pt = startableType(req.processType());
+        return start(req, pt, readDocument(pt, req.documentKey()));
+    }
+
+    private ProcessType startableType(String code) {
+        ProcessType pt = defs.processType(code)
+                .orElseThrow(() -> EngineException.of(Code.NOT_FOUND, "Tipo processo %s inesistente", code));
         if (pt.suspended())
             throw EngineException.of(Code.PROCESS_TYPE_SUSPENDED, "Tipo processo %s sospeso", pt.code());
+        return pt;
+    }
+
+    /**
+     * Lettura del documento all'avvio. Senza adapter per il tipo documento il processo parte
+     * senza verifica (valore dalla richiesta, nessun contesto). Con l'adapter: documento inesistente
+     * o sistema irraggiungibile = avvio rifiutato, mai un processo che parte "alla cieca".
+     */
+    private Optional<DocumentInfo> readDocument(ProcessType pt, String documentKey) {
+        Optional<DocumentAdapter> adapter = adapters.find(pt.docType());
+        if (adapter.isEmpty()) return Optional.empty();
+        DocumentInfo info;
+        try {
+            info = adapter.get().read(documentKey);
+        } catch (RuntimeException ex) {
+            throw EngineException.of(Code.BACKEND_UNAVAILABLE, "Impossibile leggere il documento %s %s: %s",
+                    pt.docType(), documentKey, ex.getMessage());
+        }
+        if (!info.exists())
+            throw EngineException.of(Code.DOCUMENT_NOT_FOUND, "Documento %s %s non trovato%s", pt.docType(), documentKey,
+                    info.message() == null ? "" : ": " + info.message());
+        return Optional.of(info);
+    }
+
+    private ProcessInstance start(Start req, ProcessType pt, Optional<DocumentInfo> doc) {
         ProcessVersion v = defs.activeVersion(pt.code())
                 .orElseThrow(() -> EngineException.of(Code.NO_ACTIVE_VERSION, "Nessuna versione attiva per %s", pt.code()));
         requireActiveUser(req.starterId());
 
-        Money value = req.value() != null ? req.value() : documentValue(pt.docType(), req.documentKey()).orElse(null);
+        Money value = req.value() != null ? req.value() : doc.map(DocumentInfo::value).orElse(null);
+        Map<String, String> context = doc.map(DocumentInfo::context).orElse(Map.of());
 
         ProcessInstance p = tx.inTransaction(() -> {
             if (store.hasOpenProcess(pt.code(), pt.docType(), req.documentKey(), req.backend()))
@@ -78,6 +110,7 @@ public final class WorkflowEngine {
             n.documentKey = req.documentKey();
             n.backendCode = req.backend();
             n.value = value;
+            n.docContext = context;
             n.startedBy = req.starterId();
             n.startedAt = now();
             try {
@@ -86,8 +119,13 @@ public final class WorkflowEngine {
                 throw EngineException.of(Code.DUPLICATE_PROCESS,
                         "Processo %s gia' avviato per il documento %s", pt.code(), req.documentKey());
             }
-            audit("PROCESS_STARTED", req.starterId(), "USER", n.id, null,
-                    Map.of("version", String.valueOf(v.versionNo()), "document", req.documentKey()));
+            Map<String, String> pl = new LinkedHashMap<>();
+            pl.put("version", String.valueOf(v.versionNo()));
+            pl.put("document", req.documentKey());
+            pl.put("documentCheck", doc.isPresent() ? "OK" : "NO_ADAPTER");
+            if (value != null) pl.put("value", value.toString());
+            pl.putAll(context);
+            audit("PROCESS_STARTED", req.starterId(), "USER", n.id, null, pl);
             return n;
         });
 
@@ -97,8 +135,8 @@ public final class WorkflowEngine {
 
         if (pt.autoOkFirst() && !pt.noFirstStep()) {
             for (TaskInstance t : created) {
-                if (t.stepNo == first.stepNo())
-                    act(new Act(t.id, req.starterId(), Action.OK, "Approvazione automatica all'avvio", null), true);
+                if (t.stepNo == first.stepNo() && !v.task(t.taskDefId).isChoice())
+                    act(t.id, req.starterId(), Action.OK, null, "Approvazione automatica all'avvio", null, true);
             }
         }
         return reloadProcess(p.id);
@@ -109,17 +147,38 @@ public final class WorkflowEngine {
     // =====================================================================
 
     public Outcome act(Act req) {
-        return act(req, false);
+        return act(req.taskId(), req.actorId(), req.action(), null, req.note(), req.expectedRowVersion(), false);
     }
 
-    private Outcome act(Act req, boolean system) {
-        record Prepared(ProcessInstance p, ProcessVersion v, TaskDef td, TaskInstance t, boolean asSubst) {}
+    /** Nodo di scelta: l'opzione sostituisce Approva/Respingi e decide come prosegue il processo. */
+    public Outcome choose(Choose req) {
+        if (req.optionCode() == null || req.optionCode().isBlank())
+            throw EngineException.of(Code.INVALID_STATE, "Opzione obbligatoria");
+        return act(req.taskId(), req.actorId(), null, req.optionCode(), req.note(), req.expectedRowVersion(), false);
+    }
+
+    /** Opzioni proposte sul task (vuoto se il task e' un normale Approva/Respingi). */
+    public List<OptionEntry> options(long taskId) {
+        TaskInstance t = requireTask(taskId);
+        TaskDef td = defs.version(requireProcess(t.processId).versionId).task(t.taskDefId);
+        return td.options().stream().map(o -> new OptionEntry(o.code(), o.label(), o.reject())).toList();
+    }
+
+    /** Scelte del processo: per ogni nodo, l'opzione dell'ultimo task chiuso su quel nodo. */
+    public Map<Integer, String> choices(long processId) {
+        return choicesOf(processId);
+    }
+
+    private Outcome act(long taskId, long actorId, Action requested, String optionCode, String note,
+                        Integer expectedRowVersion, boolean system) {
+        record Prepared(ProcessInstance p, ProcessVersion v, TaskDef td, TaskInstance t, boolean asSubst,
+                        Action action, OptionDef option) {}
 
         Prepared prep = guarded(() -> tx.inTransaction(() -> {
-            TaskInstance t = requireTask(req.taskId());
+            TaskInstance t = requireTask(taskId);
             if (t.status != TaskStatus.OPEN)
                 throw EngineException.of(Code.INVALID_STATE, "Task %d non aperto (%s)", t.id, t.status);
-            if (req.expectedRowVersion() != null && req.expectedRowVersion() != t.rowVersion)
+            if (expectedRowVersion != null && expectedRowVersion != t.rowVersion)
                 throw EngineException.of(Code.CONCURRENT_UPDATE, "Task %d modificato da un altro utente", t.id);
             ProcessInstance p = requireProcess(t.processId);
             if (p.status != ProcessStatus.RUNNING)
@@ -128,22 +187,35 @@ public final class WorkflowEngine {
             TaskDef td = v.task(t.taskDefId);
             if (td.interaction() == Interaction.SAPGUI_ONLY && !system)
                 throw EngineException.of(Code.INVALID_STATE, "Task %d eseguibile solo da SAP GUI", t.id);
-            boolean asSubst = system ? false : authorize(req.actorId(), t, p, td, true);
+            OptionDef option = null;
+            Action action = requested;
+            if (td.isChoice()) {
+                if (optionCode == null)
+                    throw EngineException.of(Code.INVALID_STATE, "Il task %d richiede la scelta di un'opzione", t.id);
+                option = td.option(optionCode).orElseThrow(() ->
+                        EngineException.of(Code.INVALID_STATE, "Opzione %s non prevista sul task %d", optionCode, t.id));
+                action = option.reject() ? Action.KO : Action.OK;
+            } else if (optionCode != null) {
+                throw EngineException.of(Code.INVALID_STATE, "Il task %d non prevede opzioni", t.id);
+            }
+            boolean asSubst = system ? false : authorize(actorId, t, p, td, true);
             t.status = TaskStatus.EXECUTING;
-            t.action = req.action().name();
-            t.actedById = system ? null : req.actorId();
+            t.action = action.name();
+            t.optionCode = optionCode;
+            t.actedById = system ? null : actorId;
             t.actedAsSubstitute = asSubst;
-            t.note = req.note();
+            t.note = note;
             store.updateTask(t);
-            return new Prepared(p, v, td, t, asSubst);
+            return new Prepared(p, v, td, t, asSubst, action, option);
         }));
 
-        Actor actor = system ? Actor.systemActor() : actorOf(req.actorId(), prep.asSubst());
+        Actor actor = system ? Actor.systemActor() : actorOf(actorId, prep.asSubst());
+        String actionName = prep.action().name();
 
         // BEFORE_ACTION: controlli (ex FM_EXANTE). KO o UNKNOWN bloccano l'azione.
         for (HookDef h : prep.td().hooks(HookEvent.BEFORE_ACTION)) {
             Executed ex = invoke(prep.p(), prep.t(), Contract.TASK_ACTION, HookEvent.BEFORE_ACTION, h.handlerCode(),
-                    h.config(), req.action().name(), actor, prep.td());
+                    h.config(), actionName, actor, prep.td());
             if (ex.result().status() != HandlerResult.Status.OK) {
                 reopen(prep.t().id, "ACTION_BLOCKED", ex.result().message());
                 return new Outcome(Outcome.Result.REJECTED, ex.result().message(), ProcessStatus.RUNNING, List.of());
@@ -151,12 +223,17 @@ public final class WorkflowEngine {
         }
 
         // ON_OK / ON_KO: esecuzione (ex FM_OK / FM_KO)
-        HookEvent event = req.action() == Action.OK ? HookEvent.ON_OK : HookEvent.ON_KO;
+        // l'handler dell'opzione scelta viene prima degli agganci del task
+        HookEvent event = prep.action() == Action.OK ? HookEvent.ON_OK : HookEvent.ON_KO;
+        List<HookDef> execution = new ArrayList<>();
+        if (prep.option() != null && prep.option().handlerCode() != null)
+            execution.add(new HookDef(event, 0, prep.option().handlerCode(), prep.option().config(), prep.option().label()));
+        execution.addAll(prep.td().hooks(event));
         List<Directive> directives = new ArrayList<>();
         Long lastExecId = null;
-        for (HookDef h : prep.td().hooks(event)) {
+        for (HookDef h : execution) {
             Executed ex = invoke(prep.p(), prep.t(), Contract.TASK_ACTION, event, h.handlerCode(),
-                    h.config(), req.action().name(), actor, prep.td());
+                    h.config(), actionName, actor, prep.td());
             switch (ex.result().status()) {
                 case KO -> {
                     reopen(prep.t().id, "ACTION_FAILED", ex.result().message());
@@ -202,10 +279,13 @@ public final class WorkflowEngine {
             t.closedAt = now();
             store.updateTask(t);
             applyDirectives(p, directives, sourceExecId);
-            audit("TASK_" + action.name(), t.actedById, t.actedById == null ? "SYSTEM" : "USER", p.id, t.id,
-                    t.actedAsSubstitute ? Map.of("asSubstitute", "true") : Map.of());
+            Map<String, String> pl = new LinkedHashMap<>();
+            if (t.actedAsSubstitute) pl.put("asSubstitute", "true");
+            if (t.optionCode != null) pl.put("option", t.optionCode);
+            audit(t.optionCode != null ? "OPTION_CHOSEN" : "TASK_" + action.name(), t.actedById,
+                    t.actedById == null ? "SYSTEM" : "USER", p.id, t.id, pl);
 
-            StepDef step = v.step(t.stepNo).orElseThrow();
+            StepDef step = v.stepDefOf(t.taskDefId);
             List<TaskInstance> siblings = store.tasksOf(p.id).stream()
                     .filter(o -> o.id != t.id && o.stepNo == t.stepNo && o.isOpen()).toList();
             Long actor = t.actedById;
@@ -267,7 +347,8 @@ public final class WorkflowEngine {
 
             TaskInstance n = new TaskInstance();
             n.processId = t.processId; n.taskDefId = t.taskDefId; n.stepNo = t.stepNo; n.subopNo = t.subopNo;
-            n.assigneeId = to.id(); n.teamCode = t.teamCode; n.roleCode = t.roleCode;
+            // spostare a una persona significa affidarle il task: il team (anche quello di riserva) non vale piu'
+            n.assigneeId = to.id(); n.teamCode = null; n.roleCode = t.roleCode;
             n.fromUserId = actorId; n.createdAt = now();
             n = store.insertTask(n);
             audit("TASK_MOVED", actorId, "USER", p.id, t.id, Map.of("to", to.login(), "newTask", String.valueOf(n.id)));
@@ -366,8 +447,13 @@ public final class WorkflowEngine {
 
     /** Annulla il processo e lo riavvia sulla versione attiva, collegando i due. */
     public ProcessInstance restart(long processId, long actorId, String note) {
+        // il documento si rilegge PRIMA di annullare: se SAP non risponde, il vecchio processo resta com'e'
+        ProcessInstance current = requireProcess(processId);
+        ProcessType pt = startableType(current.processTypeCode);
+        Optional<DocumentInfo> doc = readDocument(pt, current.documentKey);
         ProcessInstance old = cancelInternal(processId, actorId, REASON_RESTARTED, note);
-        ProcessInstance n = start(new Start(old.processTypeCode, old.documentKey, old.backendCode, old.startedBy, null));
+        ProcessInstance n = start(new Start(old.processTypeCode, old.documentKey, old.backendCode, old.startedBy, null),
+                pt, doc);
         tx.run(() -> {
             store.insertLink(new ProcessLink(old.id, n.id, ProcessLink.RESTART));
             audit("PROCESS_RESTARTED", actorId, "USER", old.id, null, Map.of("newProcess", String.valueOf(n.id)));
@@ -421,14 +507,19 @@ public final class WorkflowEngine {
         ProcessInstance p = requireProcess(processId);
         if (p.status != ProcessStatus.RUNNING) return List.of();
         ProcessVersion v = defs.version(p.versionId);
-        OptionalInt current = store.tasksOf(p.id).stream().filter(TaskInstance::isOpen).mapToInt(t -> t.stepNo).min();
+        Optional<TaskInstance> current = store.tasksOf(p.id).stream().filter(TaskInstance::isOpen)
+                .min(Comparator.comparingInt(t -> t.stepNo));
         if (current.isEmpty()) return List.of();
+        StepDef currentStep = v.stepDefOf(current.get().taskDefId);
+        if (currentStep.isChoiceNode()) return List.of();      // il seguito dipende dall'opzione che verra' scelta
         Map<Integer, StepState> states = store.stepStates(p.id);
+        Collection<String> chosen = choicesOf(p.id).values();
         List<PreviewEntry> out = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
-        Integer n = v.step(current.getAsInt()).orElseThrow().nextOk();
+        Integer n = currentStep.nextOk();
         while (n != null && seen.add(n)) {
-            StepDef s = v.step(n).orElseThrow();
+            StepDef s = v.resolve(n, chosen).orElse(null);
+            if (s == null) break;
             StepState st = states.get(n);
             if ((st != null && st.skipped()) || belowMinimum(p.value, s.minAmount())) {
                 n = s.nextOk();
@@ -441,6 +532,7 @@ public final class WorkflowEngine {
                     case NAME -> out.add(previewName(p, n, td));
                 }
             }
+            if (s.isChoiceNode()) break;                           // oltre il nodo il percorso non e' ancora deciso
             n = s.nextOk();
         }
         return out;
@@ -475,9 +567,10 @@ public final class WorkflowEngine {
     private record Assignee(Long userId, String teamCode, boolean fallback) {}
 
     private List<TaskInstance> activateFrom(long processId, Integer stepNo, Activation act) {
-        ProcessInstance p = refreshValue(processId);
+        ProcessInstance p = requireProcess(processId);
         ProcessVersion v = defs.version(p.versionId);
         Map<Integer, StepState> states = store.stepStates(p.id);
+        Collection<String> chosen = choicesOf(p.id).values();
         Set<Integer> seen = new HashSet<>();
         Integer n = stepNo;
         while (true) {
@@ -488,8 +581,13 @@ public final class WorkflowEngine {
             if (!seen.add(n))
                 throw EngineException.of(Code.INVALID_DEFINITION, "Ciclo di step saltati nel processo %d", p.id);
             final int stepNo2 = n;
-            StepDef s = v.step(n).orElseThrow(() ->
-                    EngineException.of(Code.INVALID_DEFINITION, "Step %d inesistente nella versione %d", stepNo2, v.id()));
+            StepDef s;
+            try {
+                s = v.resolve(n, chosen).orElseThrow(() -> EngineException.of(Code.INVALID_DEFINITION,
+                        "Step %d inesistente nella versione %d per le scelte %s", stepNo2, v.id(), chosen));
+            } catch (ProcessVersion.AmbiguousStepException e) {
+                throw new EngineException(Code.INVALID_DEFINITION, e.getMessage());
+            }
             StepState st = states.get(n);
             if (st != null && st.skipped()) {
                 auditTx("STEP_SKIPPED", null, "SYSTEM", p.id, null, Map.of("step", String.valueOf(n), "reason", st.reason()));
@@ -555,7 +653,22 @@ public final class WorkflowEngine {
             Executed ex = invoke(p, t, Contract.TASK_ACTION, HookEvent.ON_ACTIVATE, h.handlerCode(), h.config(),
                     null, Actor.systemActor(), td);
             // un ON_ACTIVATE fallito non blocca (oggi: mail non inviata); resta in audit
+            Optional<SelectOption> select = ex.result().status() != HandlerResult.Status.OK ? Optional.empty()
+                    : ex.result().directives().stream().filter(d -> d instanceof SelectOption)
+                        .map(d -> (SelectOption) d).findFirst();
+            if (select.isPresent()) {
+                String code = select.get().optionCode();
+                if (!td.isChoice() || td.option(code).isEmpty()) {
+                    auditTx("OPTION_SELECT_IGNORED", null, "SYSTEM", p.id, t.id,
+                            Map.of("handler", h.handlerCode(), "option", code));
+                    continue;
+                }
+                // instradamento automatico: stessa strada di una scelta dell'utente, eseguita dal sistema
+                Outcome o = act(t.id, 0L, null, code, "Scelta automatica (" + h.handlerCode() + ")", null, true);
+                return o.result() != Outcome.Result.DONE;
+            }
             if (ex.result().status() == HandlerResult.Status.OK
+                    && !td.isChoice()
                     && ex.result().directives().stream().anyMatch(d -> d instanceof SkipTask)) {
                 tx.run(() -> {
                     TaskInstance x = requireTask(t.id);
@@ -629,7 +742,8 @@ public final class WorkflowEngine {
         ProcessVersion v = defs.version(p.versionId);
         Optional<String> end = v.endHandlerCode();
         if (end.isPresent()) {
-            Executed ex = invoke(p, null, Contract.PROCESS_END, null, end.get(), Map.of(), "APPROVED", Actor.systemActor(), null);
+            Executed ex = invoke(p, null, Contract.PROCESS_END, null, end.get(), v.endHandlerConfig(), "APPROVED",
+                    Actor.systemActor(), null);
             if (ex.result().status() != HandlerResult.Status.OK) {
                 tx.run(() -> {
                     ProcessInstance x = requireProcess(processId);
@@ -683,7 +797,7 @@ public final class WorkflowEngine {
             HandlerContext ctx = new HandlerContext(e.idempotencyKey, contract, event, action,
                     new ProcessRef(p.id, p.processTypeCode, p.docType, p.documentKey, p.backendCode, p.correlationKey, p.value),
                     t == null ? null : new TaskRef(t.id, t.stepNo, t.subopNo, t.roleCode, td == null ? null : td.taskParam()),
-                    actor, params);
+                    actor, withChoices(params, p.id, t));
             try {
                 r = h.get().execute(ctx);
                 if (r == null) r = HandlerResult.unknown("Nessuna risposta dall'handler");
@@ -717,6 +831,34 @@ public final class WorkflowEngine {
         return new Executed(result, e.id);
     }
 
+    public static final String PARAM_OPTION = "EWF_OPTION";
+    public static final String PARAM_OPTIONS = "EWF_OPTIONS";
+
+    /**
+     * Parametri dell'handler piu' le scelte: EWF_OPTION = opzione scelta sul task in corso,
+     * EWF_OPTIONS = scelte gia' registrate nel processo, "nodo=opzione" separate da ';' (es. 20=RESO;40=CONT).
+     */
+    private Map<String, String> withChoices(Map<String, String> params, long processId, TaskInstance t) {
+        Map<Integer, String> choices = choicesOf(processId);
+        boolean current = t != null && t.optionCode != null;
+        if (choices.isEmpty() && !current) return params;
+        Map<String, String> out = new LinkedHashMap<>(params);
+        if (!choices.isEmpty())
+            out.put(PARAM_OPTIONS, choices.entrySet().stream().map(e -> e.getKey() + "=" + e.getValue())
+                    .collect(java.util.stream.Collectors.joining(";")));
+        if (current) out.put(PARAM_OPTION, t.optionCode);
+        return out;
+    }
+
+    private Map<Integer, String> choicesOf(long processId) {
+        Map<Integer, String> out = new TreeMap<>();
+        store.tasksOf(processId).stream()
+                .filter(t -> t.optionCode != null && (t.status == TaskStatus.OK || t.status == TaskStatus.KO))
+                .sorted(Comparator.comparingLong(t -> t.id))
+                .forEach(t -> out.put(t.stepNo, t.optionCode));
+        return out;
+    }
+
     private void applyDirectives(ProcessInstance p, List<Directive> directives, Long execId) {
         for (Directive d : directives) {
             switch (d) {
@@ -731,6 +873,7 @@ public final class WorkflowEngine {
                     audit("VALUE_SET", null, "HANDLER", p.id, null, Map.of("value", sv.value().toString()));
                 }
                 case SkipTask st -> { /* rilevante solo in ON_ACTIVATE */ }
+                case SelectOption so -> { /* rilevante solo in ON_ACTIVATE di un nodo di scelta */ }
             }
         }
     }
@@ -804,37 +947,9 @@ public final class WorkflowEngine {
         }
     }
 
-    private ProcessInstance refreshValue(long processId) {
-        ProcessInstance p = requireProcess(processId);
-        Optional<Money> fresh = documentValue(p.docType, p.documentKey);
-        if (fresh.isPresent() && !fresh.get().equals(p.value)) {
-            return tx.inTransaction(() -> {
-                ProcessInstance x = requireProcess(processId);
-                Money old = x.value;
-                x.value = fresh.get();
-                store.updateProcess(x);
-                audit("VALUE_CHANGED", null, "SYSTEM", x.id, null,
-                        Map.of("from", String.valueOf(old), "to", fresh.get().toString()));
-                return x;
-            });
-        }
-        return p;
-    }
-
-    private Optional<Money> documentValue(String docType, String key) {
-        try {
-            return adapters.find(docType).flatMap(a -> a.value(key));
-        } catch (RuntimeException ex) {
-            return Optional.empty();
-        }
-    }
-
+    /** Contesto fotografato all'avvio: le regole non richiamano il sistema di origine. */
     private Map<String, String> documentContext(ProcessInstance p) {
-        try {
-            return adapters.find(p.docType).map(a -> a.context(p.documentKey)).orElse(Map.of());
-        } catch (RuntimeException ex) {
-            return Map.of();
-        }
+        return p.docContext;
     }
 
     private boolean belowMinimum(Money value, Money min) {

@@ -9,6 +9,7 @@ Collega il motore eWF a SAP: ogni handler ABAP viene eseguito tramite la FM RFC
 | `SapHandlerRegistry` | Fornisce un `JcoDispatcherHandler` per i codici che sono FM ABAP (`/EWF/...`, `Z...`); `chain(...)` combina più registri |
 | `SapDestinations` | Destinazioni JCo da file esterni, password da variabile d'ambiente |
 | `DispatcherProbe` | Prova a riga di comando: esegue un handler due volte con la stessa chiave |
+| `migration.MigrationTool` | Estrattore: configurazione `/EWF/` → DB eWF, con rapporto HTML |
 
 ## Configurazione della destinazione (niente password nel codice)
 
@@ -68,3 +69,62 @@ Nella `config` di un aggancio (`task_hook.config`):
 | SAP non raggiungibile / dispatcher assente (prima della chiamata) | KO (si può riprovare) |
 | Errore durante la chiamata (rete, dump) | UNKNOWN (va verificato) |
 | `E_STATUS` O / K / U | OK / KO / UNKNOWN |
+
+## Estrattore di migrazione (`migration.MigrationTool`)
+
+Legge la configurazione `/EWF/` tramite la FM RFC `/EWF/ENGINE_EXPORT` e la porta nel DB eWF.
+Non porta processi in corso né storico (restano su `/EWF/`), né password.
+
+```
+MigrationTool <destinazione SAP> <url JDBC> [--apply] [--exclude=P1,P2] [--report=cartella]
+```
+
+- **senza `--apply`: prova generale.** Scrive, valida e attiva tutto in una transazione e poi la annulla:
+  il DB resta com'era, ma il rapporto riflette i controlli veri del DB.
+- **`--apply`**: scrive davvero, in un'unica transazione (o tutto o niente). Richiede un DB **senza processi
+  avviati**: svuota definizioni e organizzazione e le riscrive, quindi si può ripetere finché il rapporto è pulito.
+- `--exclude`: processi da non migrare, codici esatti o prefissi con `*` (default `EONE_TRASFERTE,UC_*`:
+  trasferte = progetto dedicato, `UC_*` = dimostrazione Università Cattolica).
+- `--report`: cartella del rapporto (`migrazione-<dest>-<data>-prova.html` + `.csv` delle osservazioni).
+
+Variabili d'ambiente, oltre a quelle di `SapDestinations`:
+`EWF_DB_USER` (default `ewf_owner`: serve il proprietario dello schema) e `EWF_DB_PASSWORD`.
+
+Regole di trasformazione principali (dettaglio in `LegacyMapper`):
+
+| `/EWF/` | Nuovo modello |
+|---|---|
+| `STEP_OK/KO` 99999 | fine processo |
+| `STEP_OK/KO` 00000 | avviso + errore di validazione: la versione resta in **bozza** |
+| `WF_DUMMY` | nessun aggancio |
+| `THIS_USER` = `WF_USER_TASK` | regole (o STARTER/ACTOR se il ruolo è assegnato con `SY_START`/`SY_UNAME`) |
+| `THIS_USER` = `WF_USER_TASK_MIGO` | STARTER |
+| altre FM in `THIS_USER` | handler di assegnazione |
+| `Z_WF_SET_RIL` | parametro dell'azione di fine processo (rilascio unico, come oggi) |
+| `USER_TASK` | regole, **senza** il criterio team; fascia 0..0 = nessuna fascia |
+| `USER0` | utenti (login = UNAME, utente SAP = UNAME_SAP o UNAME), senza password |
+
+
+## Prova del motore su un OdA: `OdaProbe`
+
+Motore vero (DB `ewf` + dispatcher SAP), nessuna UI. Argomenti del programma:
+
+| Comando | Effetto |
+|---|---|
+| `avvia <ebeln> <login>` | avvia `EONE_ODA` sull'ordine |
+| `stato <ebeln>` | processi, task, chiamate SAP, prossimi step |
+| `ok <taskId> <login> [nota]` | approva |
+| `ko <taskId> <login> <nota>` | respingi |
+| `sposta <taskId> <login> <login dest>` | sposta |
+| `riprova <processId> <login>` | ritenta l'azione di fine processo (processo in `ERROR`) |
+
+Variabili: `EWF_DB_URL` (default `jdbc:postgresql://localhost:5432/ewf`), `EWF_DB_USER` (default `ewf_app`),
+`EWF_DB_PASSWORD`, `EWF_SAP_DEST` (default `EWF_DEV`) e quelle della destinazione SAP.
+
+## Adattatore documento: `/EWF/DOC_INFO`
+
+FM RFC in `abap/EWF_DOC_INFO.abap` (stesso gruppo funzioni del dispatcher). Usata da `SapDocumentAdapter`
+all'avvio di ogni processo: esistenza, valore (divisa standard del mandante, via `/EWF/WF_DOCVALUE`),
+attributi in `ET_CONTEXT` (`WERKS`, `BUKRS`, `EKGRP`, `EKORG`, `LGORT`, `LIFNR`, `BSART`).
+Per le regole valgono gli stessi attributi del vecchio `WF_USER_TASK`: OdA → divisione e societa';
+RdA → anche gruppo acquisti e magazzino. Gli altri restano nel contesto con prefisso `sap.`.

@@ -19,7 +19,8 @@ public final class JdbcRuntimeStore implements RuntimeStore {
 
     private static final String P_COLS = """
             id, version_id, process_type_code, backend_code, doc_type, document_key, status, status_reason,
-            currency, net_value, started_at, started_by, ended_at, ended_by, correlation_key, row_version""";
+            currency, net_value, started_at, started_by, ended_at, ended_by, correlation_key, row_version,
+            ARRAY(SELECT e.key || chr(31) || e.value FROM jsonb_each_text(doc_context) e) AS doc_context_kv""";
 
     @Override
     public ProcessInstance insertProcess(ProcessInstance p) {
@@ -27,8 +28,8 @@ public final class JdbcRuntimeStore implements RuntimeStore {
             try (PreparedStatement ps = c.prepareStatement("""
                     INSERT INTO ewf_core.process_instance(version_id, process_type_code, backend_code, doc_type,
                            document_key, status, status_reason, currency, net_value, started_at, started_by,
-                           ended_at, ended_by, correlation_key, row_version)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0) RETURNING id""")) {
+                           ended_at, ended_by, correlation_key, doc_context, row_version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, 0) RETURNING id""")) {
                 ps.setLong(1, p.versionId);
                 ps.setString(2, p.processTypeCode);
                 ps.setString(3, p.backendCode);
@@ -43,6 +44,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                 Sql.setInstant(ps, 12, p.endedAt);
                 Sql.setLong(ps, 13, p.endedBy);
                 ps.setObject(14, p.correlationKey);
+                ps.setString(15, Sql.json(p.docContext));
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     p.id = rs.getLong(1);
@@ -124,6 +126,15 @@ public final class JdbcRuntimeStore implements RuntimeStore {
         p.endedBy = Sql.getLong(rs, "ended_by");
         p.correlationKey = Sql.getUuid(rs, "correlation_key");
         p.rowVersion = rs.getInt("row_version");
+        java.util.Map<String, String> ctx = new java.util.LinkedHashMap<>();
+        java.sql.Array arr = rs.getArray("doc_context_kv");
+        if (arr != null)
+            for (Object o : (Object[]) arr.getArray()) {
+                String kv = (String) o;
+                int sep = kv.indexOf('\u001f');
+                ctx.put(kv.substring(0, sep), kv.substring(sep + 1));
+            }
+        p.docContext = java.util.Map.copyOf(ctx);
         return p;
     }
 
@@ -151,7 +162,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
     private static final String T_COLS = """
             id, process_id, task_def_id, step_no, subop_no, status, assignee_id, team_code, claimed_by_id,
             claimed_at, role_code, from_user_id, moved_to_id, acted_by_id, acted_as_subst, action, note,
-            created_at, closed_at, row_version""";
+            created_at, closed_at, option_code, row_version""";
 
     @Override
     public TaskInstance insertTask(TaskInstance t) {
@@ -159,8 +170,8 @@ public final class JdbcRuntimeStore implements RuntimeStore {
             try (PreparedStatement ps = c.prepareStatement("""
                     INSERT INTO ewf_core.task_instance(process_id, task_def_id, step_no, subop_no, status, assignee_id,
                            team_code, claimed_by_id, claimed_at, role_code, from_user_id, moved_to_id, acted_by_id,
-                           acted_as_subst, action, note, created_at, closed_at, row_version)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0) RETURNING id""")) {
+                           acted_as_subst, action, note, created_at, closed_at, option_code, row_version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0) RETURNING id""")) {
                 ps.setLong(1, t.processId);
                 ps.setLong(2, t.taskDefId);
                 bindTask(ps, 3, t);
@@ -174,7 +185,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
         });
     }
 
-    /** Lega step_no ... closed_at (16 parametri) a partire da i. */
+    /** Lega step_no ... closed_at, option_code (17 parametri) a partire da i. */
     private static void bindTask(PreparedStatement ps, int i, TaskInstance t) throws SQLException {
         ps.setInt(i, t.stepNo);
         ps.setInt(i + 1, t.subopNo);
@@ -192,6 +203,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
         ps.setString(i + 13, t.note);
         Sql.setInstant(ps, i + 14, t.createdAt);
         Sql.setInstant(ps, i + 15, t.closedAt);
+        ps.setString(i + 16, t.optionCode);
     }
 
     @Override
@@ -202,11 +214,11 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                        SET step_no = ?, subop_no = ?, status = ?, assignee_id = ?, team_code = ?, claimed_by_id = ?,
                            claimed_at = ?, role_code = ?, from_user_id = ?, moved_to_id = ?, acted_by_id = ?,
                            acted_as_subst = ?, action = ?, note = ?, created_at = ?, closed_at = ?,
-                           row_version = row_version + 1
+                           option_code = ?, row_version = row_version + 1
                      WHERE id = ? AND row_version = ?""")) {
                 bindTask(ps, 1, t);
-                ps.setLong(17, t.id);
-                ps.setInt(18, t.rowVersion);
+                ps.setLong(18, t.id);
+                ps.setInt(19, t.rowVersion);
                 return ps.executeUpdate();
             }
         });
@@ -267,6 +279,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                     t.note = rs.getString("note");
                     t.createdAt = Sql.getInstant(rs, "created_at");
                     t.closedAt = Sql.getInstant(rs, "closed_at");
+                    t.optionCode = rs.getString("option_code");
                     t.rowVersion = rs.getInt("row_version");
                     out.add(t);
                 }

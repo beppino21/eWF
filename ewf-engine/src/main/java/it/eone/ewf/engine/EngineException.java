@@ -6,7 +6,11 @@ public final class EngineException extends RuntimeException {
 
     public enum Code {
         NOT_FOUND, NOT_AUTHORIZED, WEIGHT_TOO_LOW, INVALID_STATE, CONCURRENT_UPDATE,
-        DUPLICATE_PROCESS, NO_ACTIVE_VERSION, PROCESS_TYPE_SUSPENDED, INVALID_DEFINITION, BAD_REQUEST
+        DUPLICATE_PROCESS, NO_ACTIVE_VERSION, PROCESS_TYPE_SUSPENDED, INVALID_DEFINITION, BAD_REQUEST,
+        /** Il documento da approvare non esiste (o e' cancellato) nel sistema di origine. */
+        DOCUMENT_NOT_FOUND,
+        /** Il sistema di origine non risponde: riprovare piu' tardi. */
+        BACKEND_UNAVAILABLE
     }
 
     private final Code code;

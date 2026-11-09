@@ -50,6 +50,7 @@ abstract class WorkflowEngineContract {
         assertEquals(ProcessStatus.COMPLETED, f.status(p.id));
         assertEquals(List.of("4500000001"), f.released);
         assertEquals(2, f.b.auditTypes(p.id).stream().filter("STEP_SKIPPED"::equals).count());
+        assertEquals("01", f.releaseParams.get(0).get("Z_WF_SET_RIL"), "codice di rilascio all'azione di fine");
     }
 
     @Test
@@ -67,14 +68,46 @@ abstract class WorkflowEngineContract {
     }
 
     @Test
-    void valoreRicalcolatoAdOgniAvanzamento() {
+    void documentoLettoSoloAllAvvio() {
+        f.purchaseOrders.context("4500000003", Map.of("plant", "1000"));
         ProcessInstance p = f.startOda("4500000003", "5000");
-        f.ok(f.openTask(p.id).id, ROSSI);
-        // nel frattempo l'OdA viene modificato in SAP e supera la soglia del 2° livello
+        int reads = f.purchaseOrders.reads();
+        // nel frattempo l'OdA viene modificato in SAP: il processo resta sulla fotografia dell'avvio
         f.purchaseOrders.value("4500000003", Money.of("15000", "EUR"));
+        f.ok(f.openTask(p.id).id, ROSSI);
         f.ok(f.openTask(p.id).id, BIANCHI);
-        assertEquals(30, f.openTask(p.id).stepNo);
-        assertTrue(f.b.auditTypes(p.id).contains("VALUE_CHANGED"));
+        assertEquals(ProcessStatus.COMPLETED, f.status(p.id), "5000 EUR: soglie del 2° e 3° livello non raggiunte");
+        assertEquals(reads, f.purchaseOrders.reads(), "nessuna rilettura dopo l'avvio");
+        assertEquals(Map.of("plant", "1000"), f.store.process(p.id).orElseThrow().docContext, "contesto salvato sul processo");
+    }
+
+    @Test
+    void documentoInesistenteAvvioRifiutato() {
+        f.purchaseOrders.missing("4500000099");
+        EngineException e = assertThrows(EngineException.class, () -> f.startOda("4500000099", "100"));
+        assertEquals(Code.DOCUMENT_NOT_FOUND, e.code());
+        assertTrue(e.getMessage().contains("cancellato"), e.getMessage());
+    }
+
+    @Test
+    void sistemaDOrigineIrraggiungibileAvvioRifiutatoENessunProcesso() {
+        f.purchaseOrders.offline(true);
+        EngineException e = assertThrows(EngineException.class, () -> f.engine.start(
+                new Requests.Start(ODA, "4500000098", null, ROSSI, null)));
+        assertEquals(Code.BACKEND_UNAVAILABLE, e.code());
+        f.purchaseOrders.offline(false);
+        ProcessInstance p = f.engine.start(new Requests.Start(ODA, "4500000098", null, ROSSI, null));
+        assertEquals(ProcessStatus.RUNNING, p.status, "nessun processo fantasma rimasto dal tentativo fallito");
+    }
+
+    @Test
+    void riavvioConSistemaIrraggiungibileLasciaIlProcessoComEra() {
+        ProcessInstance p = f.startOda("4500000097", "1000");
+        f.purchaseOrders.offline(true);
+        assertEquals(Code.BACKEND_UNAVAILABLE,
+                assertThrows(EngineException.class, () -> f.engine.restart(p.id, ADMIN, "Prova")).code());
+        assertEquals(ProcessStatus.RUNNING, f.status(p.id), "non annullato");
+        f.purchaseOrders.offline(false);
     }
 
     @Test
@@ -438,5 +471,147 @@ abstract class WorkflowEngineContract {
             steps.add(s);
         }
         return new ProcessVersion(v.id(), v.processTypeCode(), v.versionNo(), v.endHandlerCode().orElse(null), steps);
+    }
+
+    // ------------------------------------------------------------------
+    // Nodi di scelta e rami per opzione
+    // ------------------------------------------------------------------
+
+    private TaskInstance node(ProcessInstance p) {
+        f.ok(f.openTask(p.id).id, ROSSI);                       // 10 -> 20
+        TaskInstance n = f.openTask(p.id);
+        assertEquals(20, n.stepNo);
+        assertEquals(BIANCHI, n.assigneeId);
+        return n;
+    }
+
+    @Test
+    void ramoAPassaPerLaSuaVarianteEPoiPerIlTroncoComune() {
+        ProcessInstance p = f.startRami("R-A");
+        TaskInstance n = node(p);
+        assertEquals(List.of("A", "B", "RIF"), f.engine.options(n.id).stream().map(Requests.OptionEntry::code).toList());
+
+        f.choose(n.id, BIANCHI, "A");
+        TaskInstance a = f.openTask(p.id);
+        assertEquals(30, a.stepNo);
+        assertEquals(Long.valueOf(VERDI), a.assigneeId, "variante A: Lavorazione A");
+        assertEquals(Map.of(20, "A"), f.engine.choices(p.id));
+        assertEquals("standard", f.optionHandlerCalls.get(0).get("motivo"), "handler dell'opzione con la sua configurazione");
+        assertEquals("A", f.optionHandlerCalls.get(0).get(WorkflowEngine.PARAM_OPTION));
+
+        f.ok(a.id, VERDI);
+        TaskInstance c = f.openTask(p.id);
+        assertEquals(50, c.stepNo, "A salta il 40 (esiste solo nel ramo B) e si ricongiunge al 50");
+        f.ok(c.id, ROSSI);
+        assertEquals(ProcessStatus.COMPLETED, f.status(p.id));
+        assertEquals("20=A", f.endParams.get(0).get(WorkflowEngine.PARAM_OPTIONS), "le scelte arrivano all'azione di fine");
+        assertEquals("X", f.endParams.get(0).get("FINE"));
+        assertTrue(f.b.auditTypes(p.id).contains("OPTION_CHOSEN"));
+    }
+
+    @Test
+    void ramoBHaUnoStepInPiu() {
+        ProcessInstance p = f.startRami("R-B");
+        f.choose(node(p).id, BIANCHI, "B");
+        TaskInstance b30 = f.openTask(p.id);
+        assertEquals(Long.valueOf(NERI), b30.assigneeId, "variante B: Lavorazione B");
+        f.ok(b30.id, NERI);
+        TaskInstance b40 = f.openTask(p.id);
+        assertEquals(40, b40.stepNo);
+        f.ok(b40.id, ROSSI);
+        TaskInstance c = f.openTask(p.id);
+        assertEquals(50, c.stepNo);
+        f.ok(c.id, ROSSI);
+        assertEquals(ProcessStatus.COMPLETED, f.status(p.id));
+        assertEquals("20=B", f.traced.get(f.traced.size() - 1).get(WorkflowEngine.PARAM_OPTIONS),
+                "gli handler degli step successivi vedono la scelta");
+        assertTrue(f.optionHandlerCalls.isEmpty(), "B non ha handler");
+    }
+
+    @Test
+    void rifiutoComeOpzioneChiudeInNegativo() {
+        ProcessInstance p = f.startRami("R-RIF");
+        f.choose(node(p).id, BIANCHI, "RIF");
+        assertEquals(ProcessStatus.REJECTED, f.status(p.id));
+        assertTrue(f.endParams.isEmpty(), "nessuna azione di fine su un rifiuto");
+    }
+
+    @Test
+    void sulNodoServeUnOpzioneESoloUnaDiQuelleProposte() {
+        ProcessInstance p = f.startRami("R-ERR");
+        TaskInstance n = node(p);
+        EngineException e = assertThrows(EngineException.class, () -> f.ok(n.id, BIANCHI));
+        assertEquals(Code.INVALID_STATE, e.code());
+        assertEquals(Code.INVALID_STATE, assertThrows(EngineException.class, () -> f.choose(n.id, BIANCHI, "ZZ")).code());
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(EngineException.class, () -> f.choose(n.id, ACQ2, "A")).code(),
+                "la scelta segue le stesse regole di autorizzazione di Approva/Respingi");
+        assertEquals(TaskStatus.OPEN, f.openTask(p.id).status, "nessun effetto");
+
+        ProcessInstance o = f.startOda("4500000901", "1000");
+        TaskInstance t10 = f.openTask(o.id);
+        assertEquals(Code.INVALID_STATE, assertThrows(EngineException.class, () -> f.choose(t10.id, ROSSI, "A")).code(),
+                "opzioni solo sui nodi di scelta");
+    }
+
+    @Test
+    void ritornoAlNodoESceltaDiversaCambiaRamo() {
+        ProcessInstance p = f.startRami("R-BACK");
+        f.choose(node(p).id, BIANCHI, "B");
+        f.ko(f.openTask(p.id).id, NERI, "rivedere");              // 30/B rifiuta: torna al nodo 20
+        TaskInstance again = f.openTask(p.id);
+        assertEquals(20, again.stepNo);
+        f.choose(again.id, BIANCHI, "A");
+        assertEquals(Map.of(20, "A"), f.engine.choices(p.id), "la nuova scelta sostituisce la precedente");
+        assertEquals(Long.valueOf(VERDI), f.openTask(p.id).assigneeId, "ora la variante A");
+    }
+
+    @Test
+    void handlerSceglieLOpzioneAlPostoDellUtente() {
+        f.autoChoice = "B";
+        ProcessInstance p = f.startRami("R-AUTO");
+        f.ok(f.openTask(p.id).id, ROSSI);                        // 10 -> 20: il nodo si decide da solo
+        TaskInstance t = f.openTask(p.id);
+        assertEquals(30, t.stepNo);
+        assertEquals(NERI, t.assigneeId);
+        TaskInstance decided = f.store.tasksOf(p.id).stream().filter(x -> x.stepNo == 20).findFirst().orElseThrow();
+        assertEquals("B", decided.optionCode);
+        assertNull(decided.actedById, "scelta del sistema");
+    }
+
+    @Test
+    void opzioneSconosciutaDaHandlerIgnorataIlNodoAspettaLUtente() {
+        f.autoChoice = "ZZ";
+        ProcessInstance p = f.startRami("R-AUTO2");
+        f.ok(f.openTask(p.id).id, ROSSI);
+        assertEquals(20, f.openTask(p.id).stepNo);
+        assertTrue(f.b.auditTypes(p.id).contains("OPTION_SELECT_IGNORED"));
+    }
+
+    @Test
+    void anteprimaSiFermaAlNodoNonAncoraDeciso() {
+        ProcessInstance p = f.startRami("R-PREV");
+        List<Requests.PreviewEntry> before = f.engine.preview(p.id);
+        assertEquals(List.of(20), before.stream().map(Requests.PreviewEntry::stepNo).toList(),
+                "dal 10 si vede solo il nodo: oltre dipende dall'opzione");
+        f.choose(node(p).id, BIANCHI, "B");
+        assertEquals(List.of(40, 50), f.engine.preview(p.id).stream().map(Requests.PreviewEntry::stepNo).toList(),
+                "deciso B: il resto del ramo B e il tronco");
+    }
+
+    @Test
+    void taskDelTeamDiRiservaSpostatoAUnaPersonaNonEPiuDelTeam() {
+        f.b.removeRules("RESPONSABILE_ACQ");                     // lo step 20 finisce al team di riserva
+        ProcessInstance p = f.startOda("4500000950", "1000");
+        f.ok(f.openTask(p.id).id, ROSSI);
+        TaskInstance t20 = f.openTask(p.id);
+        assertEquals("WFADM", t20.teamCode);
+
+        long moved = f.engine.move(t20.id, ADMIN, BIANCHI, "A chi compete");
+        TaskInstance n = f.store.task(moved).orElseThrow();
+        assertEquals(Long.valueOf(BIANCHI), n.assigneeId);
+        assertNull(n.teamCode, "dopo lo spostamento il task e' solo di BIANCHI");
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(EngineException.class, () -> f.ok(moved, ADMIN)).code(),
+                "l'amministratore non puo' piu' approvare al posto di BIANCHI");
+        f.ok(moved, BIANCHI);
     }
 }

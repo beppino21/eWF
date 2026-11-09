@@ -20,6 +20,8 @@ public final class TaskInstance {
     public Long actedById;
     public boolean actedAsSubstitute;
     public String action;
+    /** Opzione scelta (solo nodi di scelta). */
+    public String optionCode;
     public String note;
     public Instant createdAt;
     public Instant closedAt;
@@ -32,7 +34,7 @@ public final class TaskInstance {
         c.id = id; c.processId = processId; c.taskDefId = taskDefId; c.stepNo = stepNo; c.subopNo = subopNo;
         c.status = status; c.assigneeId = assigneeId; c.teamCode = teamCode; c.claimedById = claimedById;
         c.claimedAt = claimedAt; c.roleCode = roleCode; c.fromUserId = fromUserId; c.movedToId = movedToId;
-        c.actedById = actedById; c.actedAsSubstitute = actedAsSubstitute; c.action = action; c.note = note;
+        c.actedById = actedById; c.actedAsSubstitute = actedAsSubstitute; c.action = action; c.optionCode = optionCode; c.note = note;
         c.createdAt = createdAt; c.closedAt = closedAt; c.rowVersion = rowVersion;
         return c;
     }

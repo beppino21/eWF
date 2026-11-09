@@ -12,7 +12,7 @@ Un handler non modifica mai lo stato del motore: al massimo restituisce
 | `TASK_ACTION` | Eventi task: `BEFORE_ACTION`, `ON_OK`, `ON_KO`, `ON_ACTIVATE`, `BUTTON` | azione (`OK`/`KO`/`BUTTON`), parametri dell'aggancio | esito, messaggio, documenti creati, istruzioni |
 | `ASSIGNEE` | Attivazione di un task con `assignee_mode = HANDLER` | — | uno o più utenti (più utenti = task paralleli) |
 | `PROCESS_END` | Processo in stato `COMPLETING` | esito finale (`APPROVED`/`REFUSED`) | esito, messaggio, documenti creati |
-| `DOC_ADAPTER` | Avvio, avanzamento, risolutore regole, UI | chiave documento | valore e divisa, attributi di contesto, link di visualizzazione |
+| `DOC_ADAPTER` | Avvio (lettura unica, salvata sul processo) | tipo e chiave documento | esistenza, valore e divisa, attributi di contesto (on-premise: `/EWF/DOC_INFO`) |
 
 Tipi di implementazione (`handler.kind`): `RFC_FM` (via dispatcher), `API` (OData/REST,
 Public Edition), `JAVA` (classe nel prodotto o in un modulo), `INTERACTIVE`
@@ -59,9 +59,15 @@ Semantica:
 | `SKIP_STEP=<n>` | lo step n viene saltato (`instance_step_state.reason = HANDLER`) | TASK_ACTION |
 | `SKIP_TASK=X` | il task appena creato viene chiuso come SKIPPED | TASK_ACTION (`ON_ACTIVATE`) |
 | `SET_VALUE=<importo>/<divisa>` | aggiorna il valore documento del processo | TASK_ACTION, DOC_ADAPTER |
+| `SELECT_OPTION=<codice>` | sceglie l'opzione di un nodo di scelta al posto dell'utente | TASK_ACTION (`ON_ACTIVATE` del nodo) |
 
 Niente altro: niente "vai allo step X", niente modifiche al piano oltre lo skip.
-Le transizioni restano quelle della definizione versionata.
+Le transizioni restano quelle della definizione versionata: anche `SELECT_OPTION`
+sceglie solo tra i rami gia' previsti.
+
+Parametri in ingresso legati alle scelte (in `IT_PARAMS`): `EWF_OPTION` = opzione scelta
+sul task in corso; `EWF_OPTIONS` = scelte gia' registrate nel processo, `nodo=opzione`
+separate da `;` (es. `20=RESO;40=CONT`).
 
 ## 5. Assegnazione: identificativi
 
@@ -104,7 +110,7 @@ non girano via RFC senza GUI. Vanno classificate `INTERACTIVE`.
 | `/EWF/S_ENG_KV` | struttura | `NAME` CHAR30, `VALUE` CHAR255 |
 | `/EWF/S_ENG_USER` | struttura | `ID_TYPE` CHAR3, `USER_ID` CHAR64 |
 | `/EWF/S_ENG_DOC` | struttura | `DOC_CAT` CHAR4, `DOC_NUMBER` CHAR20, `DOC_YEAR` CHAR4, `COMP_CODE` CHAR4 |
-| `/EWF/ENG_DISP` | tabella trasparente (classe A) | `MANDT` (chiave), `IDEMP_KEY` CHAR36 (chiave), `HANDLER` CHAR30, `CONTRACT` CHAR15, `EVENT` CHAR15, `PROCID` NUMC10, `TASKID` NUMC10, `ACTOR` CHAR64, `STATUS` CHAR1, `MESSAGE` CHAR255, `TS_START` DEC15 (TIMESTAMP), `TS_END` DEC15, `OUTPUT` STRG |
+| `/EWF/ENG_DISP` | tabella trasparente (classe A) | `MANDT` (chiave), `IDEMP_KEY` CHAR36 (chiave), `HANDLER_FM` CHAR30, `CONTRACT` CHAR15, `EVENT` CHAR15, `PROCID` NUMC10, `TASKID` NUMC10, `ACTOR` CHAR64, `STATUS` CHAR1, `MESSAGE` CHAR255, `TS_START` DEC15 (TIMESTAMP), `TS_END` DEC15, `OUT_DATA` STRING |
 
 Nel TOP del gruppo funzioni: `TYPE-POOLS abap.`
 

@@ -41,7 +41,13 @@ final class Fixture {
     /** Comportamento degli handler finti, modificabile dai test. */
     HandlerResult lockCheck = HandlerResult.ok();
     final List<String> released = new ArrayList<>();
+    final List<Map<String, String>> releaseParams = new ArrayList<>();
     int releaseFailures = 0;
+    /** Processo a rami: opzione che l'handler ON_ACTIVATE del nodo sceglie da solo (null = decide l'utente). */
+    String autoChoice = null;
+    final List<Map<String, String>> traced = new ArrayList<>();
+    final List<Map<String, String>> optionHandlerCalls = new ArrayList<>();
+    final List<Map<String, String>> endParams = new ArrayList<>();
 
     Fixture(Backend backend) {
         b = backend;
@@ -69,9 +75,15 @@ final class Fixture {
                 return HandlerResult.ko("BAPI_PO_RELEASE: codice di rilascio non valido");
             }
             released.add(ctx.process().documentKey());
+            releaseParams.add(ctx.params());
             return HandlerResult.ok();
         });
         handlers.register("/EWF/SEND_MAIL_NEW_TASK", ctx -> HandlerResult.ok());
+        handlers.register("/T/AUTO", ctx -> autoChoice == null ? HandlerResult.ok()
+                : HandlerResult.withDirectives(new HandlerResult.SelectOption(autoChoice)));
+        handlers.register("/T/TRACE", ctx -> { traced.add(ctx.params()); return HandlerResult.ok(); });
+        handlers.register("/T/OPT_A", ctx -> { optionHandlerCalls.add(ctx.params()); return HandlerResult.ok(); });
+        handlers.register("/T/END", ctx -> { endParams.add(ctx.params()); return HandlerResult.ok(); });
 
         b.defineType(new ProcessType(ODA, "Autorizzazione OdA", "F", false, false, false));
         b.activate(odaVersion(1, PreviewMode.NAME));
@@ -96,7 +108,7 @@ final class Fixture {
         HookDef lock = HookDef.of(HookEvent.BEFORE_ACTION, "/EWF/WF_CHECK_LOCK_EKKO");
         TaskDef l2 = new TaskDef(id * 100 + 4, 0, "3° Rilascio Responsabile Acquisti", "RESPONSABILE_ACQ_L2", 200,
                 AssigneeMode.RULES, null, false, null, l2Preview, Interaction.WEB, null, List.of(mail, lock));
-        return new ProcessVersion(id, ODA, (int) id, "/EWF/WF_RIL_ODA", List.of(
+        return new ProcessVersion(id, ODA, (int) id, "/EWF/WF_RIL_ODA", Map.of("Z_WF_SET_RIL", "01"), List.of(
                 new StepDef(10, true, JoinPolicy.ALL, 20, null, null,
                         List.of(task(id * 100 + 1, "Avvio processo Autorizz. ODA", "UFFICIO_ACQUISTI", 0, AssigneeMode.STARTER, mail))),
                 new StepDef(20, false, JoinPolicy.ALL, 30, 10, null,
@@ -104,6 +116,49 @@ final class Fixture {
                 new StepDef(30, false, JoinPolicy.ALL, 40, 10, Money.of("10000", "EUR"),
                         List.of(task(id * 100 + 3, "2° Rilascio Responsabile Acquisti", "RESPONSABILE_ACQ_L1", 200, AssigneeMode.RULES, mail, lock))),
                 new StepDef(40, false, JoinPolicy.ALL, null, 10, Money.of("50000", "EUR"), List.of(l2))));
+    }
+
+    static final String RAMI = "RAMI";
+
+    /**
+     * Processo generico a rami:
+     *   10 richiesta -> 20 nodo di scelta (A, B, RIF = respingi)
+     *   A: 30/A -> 50          B: 30/B -> 40/B -> 50          RIF: fine negativa
+     *   50 chiusura (tronco comune, i rami si ricongiungono) -> fine
+     *   Rifiuti nei rami: tornano al nodo 20.
+     */
+    ProcessVersion ramiVersion(long id) {
+        HookDef auto = HookDef.of(HookEvent.ON_ACTIVATE, "/T/AUTO");
+        HookDef trace = HookDef.of(HookEvent.ON_OK, "/T/TRACE");
+        TaskDef node = task(id * 100 + 2, "Decisione", "RESPONSABILE_ACQ", 100, AssigneeMode.RULES, auto, trace)
+                .withOptions(List.of(
+                        new OptionDef("A", "Ramo A", false, "/T/OPT_A", Map.of("motivo", "standard")),
+                        OptionDef.of("B", "Ramo B"),
+                        OptionDef.reject("RIF", "Respingi")));
+        return new ProcessVersion(id, RAMI, 1, "/T/END", Map.of("FINE", "X"), List.of(
+                new StepDef(10, true, JoinPolicy.ALL, 20, null, null,
+                        List.of(task(id * 100 + 1, "Richiesta", null, 0, AssigneeMode.STARTER))),
+                new StepDef(20, false, JoinPolicy.ALL, 30, null, null, List.of(node)),
+                new StepDef(30, false, JoinPolicy.ALL, 50, 20, null,
+                        List.of(task(id * 100 + 3, "Lavorazione A", "RESPONSABILE_ACQ_L1", 200, AssigneeMode.RULES)), "A"),
+                new StepDef(30, false, JoinPolicy.ALL, 40, 20, null,
+                        List.of(task(id * 100 + 4, "Lavorazione B", "RESPONSABILE_ACQ_L2", 200, AssigneeMode.RULES)), "B"),
+                new StepDef(40, false, JoinPolicy.ALL, 50, 20, null,
+                        List.of(task(id * 100 + 5, "Verifica B", null, 0, AssigneeMode.STARTER)), "B"),
+                new StepDef(50, false, JoinPolicy.ALL, null, 20, null,
+                        List.of(task(id * 100 + 6, "Chiusura", null, 0, AssigneeMode.STARTER, trace)))));
+    }
+
+    ProcessInstance startRami(String key) {
+        if (b.defs().processType(RAMI).isEmpty()) {
+            b.defineType(new ProcessType(RAMI, "Processo a rami", "GEN", false, false, false));
+            b.activate(ramiVersion(20));
+        }
+        return engine.start(new Requests.Start(RAMI, key, null, ROSSI, null));
+    }
+
+    Requests.Outcome choose(long taskId, long actor, String option) {
+        return engine.choose(new Requests.Choose(taskId, actor, option, null, null));
     }
 
     ProcessInstance startOda(String ebeln, String amountEur) {

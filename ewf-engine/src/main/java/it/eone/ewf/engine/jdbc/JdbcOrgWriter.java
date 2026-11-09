@@ -25,18 +25,26 @@ public final class JdbcOrgWriter {
      * @return id dell'utente
      */
     public long addUser(Long id, String login, String displayName, String sapUser, int weight) {
+        return addUser(id, login, displayName, sapUser, weight, null, true);
+    }
+
+    public long addUser(Long id, String login, String displayName, String sapUser, int weight,
+                        String email, boolean active) {
         return db.with(c -> {
             String sql = id == null
-                    ? "INSERT INTO ewf_org.app_user(login, display_name, sap_user, weight) VALUES (?, ?, ?, ?) RETURNING id"
-                    : "INSERT INTO ewf_org.app_user(id, login, display_name, sap_user, weight) OVERRIDING SYSTEM VALUE "
-                      + "VALUES (?, ?, ?, ?, ?) RETURNING id";
+                    ? "INSERT INTO ewf_org.app_user(login, display_name, sap_user, weight, email, active) "
+                      + "VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
+                    : "INSERT INTO ewf_org.app_user(id, login, display_name, sap_user, weight, email, active) "
+                      + "OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id";
             try (PreparedStatement ps = c.prepareStatement(sql)) {
                 int i = 1;
                 if (id != null) ps.setLong(i++, id);
                 ps.setString(i++, login);
                 ps.setString(i++, displayName);
                 ps.setString(i++, sapUser);
-                ps.setInt(i, weight);
+                ps.setInt(i++, weight);
+                ps.setString(i++, email);
+                ps.setBoolean(i, active);
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     return rs.getLong(1);
@@ -106,6 +114,16 @@ public final class JdbcOrgWriter {
                 }
             }
         });
+    }
+
+    public void ensureRole(String code, String description) {
+        update("INSERT INTO ewf_org.role(code, description) VALUES (?, ?) ON CONFLICT (code) DO NOTHING",
+                code, description == null || description.isBlank() ? code : description);
+    }
+
+    public void ensureTeam(String code, String description) {
+        update("INSERT INTO ewf_org.team(code, description) VALUES (?, ?) ON CONFLICT (code) DO NOTHING",
+                code, description == null || description.isBlank() ? code : description);
     }
 
     public void deleteRules(String roleCode) {

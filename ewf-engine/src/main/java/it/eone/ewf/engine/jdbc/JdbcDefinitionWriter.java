@@ -55,13 +55,15 @@ public final class JdbcDefinitionWriter {
             Long endHandler = v.endHandlerCode().isPresent() ? handlerId(c, v.endHandlerCode().get(), "PROCESS_END") : null;
             long versionId;
             try (PreparedStatement ps = c.prepareStatement("""
-                    INSERT INTO ewf_core.process_version(process_type_code, version_no, status, end_handler_id)
+                    INSERT INTO ewf_core.process_version(process_type_code, version_no, status, end_handler_id,
+                                                         end_handler_config)
                     VALUES (?, (SELECT coalesce(max(version_no), 0) + 1 FROM ewf_core.process_version
-                                 WHERE process_type_code = ?), 'DRAFT', ?)
+                                 WHERE process_type_code = ?), 'DRAFT', ?, ?::jsonb)
                     RETURNING id""")) {
                 ps.setString(1, v.processTypeCode());
                 ps.setString(2, v.processTypeCode());
                 Sql.setLong(ps, 3, endHandler);
+                ps.setString(4, Sql.json(v.endHandlerConfig()));
                 versionId = single(ps);
             }
 
@@ -69,8 +71,8 @@ public final class JdbcDefinitionWriter {
                 long stepId;
                 try (PreparedStatement ps = c.prepareStatement("""
                         INSERT INTO ewf_core.step_def(version_id, step_no, is_first, join_policy, next_step_ok,
-                                                      next_step_ko, min_amount, min_amount_currency)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""")) {
+                                                      next_step_ko, min_amount, min_amount_currency, option_code)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""")) {
                     ps.setLong(1, versionId);
                     ps.setInt(2, s.stepNo());
                     ps.setBoolean(3, s.first());
@@ -79,6 +81,7 @@ public final class JdbcDefinitionWriter {
                     Sql.setInt(ps, 6, s.nextKo());
                     Sql.setBigDecimal(ps, 7, s.minAmount() == null ? null : s.minAmount().amount());
                     ps.setString(8, s.minAmount() == null ? null : s.minAmount().currency());
+                    ps.setString(9, s.option());
                     stepId = single(ps);
                 }
                 for (TaskDef t : s.tasks()) {
@@ -110,6 +113,23 @@ public final class JdbcDefinitionWriter {
                         ps.setString(12, t.taskParam());
                         taskId = single(ps);
                     }
+                    int seq = 0;
+                    for (OptionDef o : t.options()) {
+                        Long oh = o.handlerCode() == null ? null : handlerId(c, o.handlerCode(), "TASK_ACTION");
+                        try (PreparedStatement ps = c.prepareStatement("""
+                                INSERT INTO ewf_core.task_option(task_def_id, option_code, seq, handler_id, label,
+                                                                 reject, config)
+                                VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)""")) {
+                            ps.setLong(1, taskId);
+                            ps.setString(2, o.code());
+                            ps.setInt(3, ++seq);
+                            Sql.setLong(ps, 4, oh);
+                            ps.setString(5, o.label() == null ? o.code() : o.label());
+                            ps.setBoolean(6, o.reject());
+                            ps.setString(7, Sql.json(o.config()));
+                            ps.executeUpdate();
+                        }
+                    }
                     for (HookDef h : t.hooks()) {
                         long hid = handlerId(c, h.handlerCode(), "TASK_ACTION");
                         try (PreparedStatement ps = c.prepareStatement("""
@@ -132,15 +152,54 @@ public final class JdbcDefinitionWriter {
         }));
     }
 
-    private void activate(Connection c, long versionId, String type) throws SQLException {
-        List<String> errors = new ArrayList<>();
+    /** Esito della validazione: controlli SQL (ewf_core.validate_version) piu' rami e opzioni (Java). */
+    public record Problem(String severity, Integer stepNo, String problem) {}
+
+    public List<Problem> validate(long versionId) {
+        return db.inTransaction(() -> db.with(c -> validate(c, versionId)));
+    }
+
+    private List<Problem> validate(Connection c, long versionId) throws SQLException {
+        List<Problem> out = new ArrayList<>();
         try (PreparedStatement ps = c.prepareStatement(
-                "SELECT severity, step_no, problem FROM ewf_core.validate_version(?) WHERE severity = 'ERROR'")) {
+                "SELECT severity, step_no, problem FROM ewf_core.validate_version(?) ORDER BY severity, step_no")) {
             ps.setLong(1, versionId);
             try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) errors.add("step " + rs.getString(2) + ": " + rs.getString(3));
+                while (rs.next()) out.add(new Problem(rs.getString(1), Sql.getInt(rs, "step_no"), rs.getString(3)));
             }
         }
+        if (out.stream().anyMatch(p -> p.severity().equals("ERROR"))) return out;
+        // la struttura regge: si carica la versione e si percorrono tutti i rami possibili
+        try {
+            ProcessVersion v = new JdbcDefinitionStore(db).load(versionId);
+            for (ProcessVersion.Problem p : v.problems()) out.add(new Problem(p.severity(), p.stepNo(), p.problem()));
+        } catch (IllegalArgumentException e) {
+            out.add(new Problem("ERROR", null, e.getMessage()));
+        }
+        return out;
+    }
+
+    /** Attiva una versione gia' salvata. Rifiuta se la validazione trova errori. */
+    public void activate(long versionId) {
+        db.run(() -> db.with(c -> {
+            String type;
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT process_type_code FROM ewf_core.process_version WHERE id = ?")) {
+                ps.setLong(1, versionId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new JdbcException("Versione " + versionId + " inesistente");
+                    type = rs.getString(1);
+                }
+            }
+            activate(c, versionId, type);
+            return null;
+        }));
+    }
+
+    private void activate(Connection c, long versionId, String type) throws SQLException {
+        List<String> errors = new ArrayList<>();
+        for (Problem p : validate(c, versionId))
+            if (p.severity().equals("ERROR")) errors.add("step " + p.stepNo() + ": " + p.problem());
         if (!errors.isEmpty())
             throw new JdbcException("Versione non attivabile: " + String.join("; ", errors));
         try (PreparedStatement ps = c.prepareStatement(
@@ -153,6 +212,22 @@ public final class JdbcDefinitionWriter {
             ps.setLong(1, versionId);
             ps.executeUpdate();
         }
+    }
+
+    /** Registra un handler nel catalogo se non c'e' (kind: RFC_FM, API, JAVA, INTERACTIVE). */
+    public void ensureHandler(String code, String kind, String contract, String description) {
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO ewf_core.handler(code, kind, contract, target, description)
+                    VALUES (?, ?, ?, ?, ?) ON CONFLICT (code) DO NOTHING""")) {
+                ps.setString(1, code);
+                ps.setString(2, kind);
+                ps.setString(3, contract);
+                ps.setString(4, code);
+                ps.setString(5, description);
+                return ps.executeUpdate();
+            }
+        });
     }
 
     /** Id dell'handler nel catalogo; se manca lo crea come JAVA (da completare in amministrazione). */
