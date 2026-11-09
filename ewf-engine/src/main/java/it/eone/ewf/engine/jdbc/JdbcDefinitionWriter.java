@@ -118,8 +118,8 @@ public final class JdbcDefinitionWriter {
                         Long oh = o.handlerCode() == null ? null : handlerId(c, o.handlerCode(), "TASK_ACTION");
                         try (PreparedStatement ps = c.prepareStatement("""
                                 INSERT INTO ewf_core.task_option(task_def_id, option_code, seq, handler_id, label,
-                                                                 reject, config)
-                                VALUES (?, ?, ?, ?, ?, ?, ?::jsonb)""")) {
+                                                                 reject, config, start_process_type, spawn_mode)
+                                VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)""")) {
                             ps.setLong(1, taskId);
                             ps.setString(2, o.code());
                             ps.setInt(3, ++seq);
@@ -127,6 +127,8 @@ public final class JdbcDefinitionWriter {
                             ps.setString(5, o.label() == null ? o.code() : o.label());
                             ps.setBoolean(6, o.reject());
                             ps.setString(7, Sql.json(o.config()));
+                            ps.setString(8, o.startProcess());
+                            ps.setString(9, o.spawnMode() == null ? null : o.spawnMode().name());
                             ps.executeUpdate();
                         }
                     }
@@ -166,6 +168,21 @@ public final class JdbcDefinitionWriter {
             ps.setLong(1, versionId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) out.add(new Problem(rs.getString(1), Sql.getInt(rs, "step_no"), rs.getString(3)));
+            }
+        }
+        // opzioni che avviano un tipo processo inesistente
+        try (PreparedStatement ps = c.prepareStatement("""
+                SELECT s.step_no, o.option_code, o.start_process_type
+                  FROM ewf_core.task_option o
+                  JOIN ewf_core.task_def d ON d.id = o.task_def_id
+                  JOIN ewf_core.step_def s ON s.id = d.step_id
+                 WHERE s.version_id = ? AND o.start_process_type IS NOT NULL
+                   AND NOT EXISTS (SELECT 1 FROM ewf_core.process_type p WHERE p.code = o.start_process_type)""")) {
+            ps.setLong(1, versionId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next())
+                    out.add(new Problem("ERROR", rs.getInt(1), "opzione " + rs.getString(2)
+                            + ": tipo processo da avviare " + rs.getString(3) + " inesistente"));
             }
         }
         if (out.stream().anyMatch(p -> p.severity().equals("ERROR"))) return out;

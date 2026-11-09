@@ -161,6 +161,53 @@ final class Fixture {
         return engine.choose(new Requests.Choose(taskId, actor, option, null, null));
     }
 
+    static final String AVVIO = "AVVIO_ODA";
+    static final String ODA_URG = "ODA_URGENTE";
+    static final String RECLAMO = "RECLAMO";
+
+    /**
+     * Processo di sola "partenza" (decisione di Beppe del 9/11): l'autore sceglie quale approvazione avviare.
+     *   10 Avvio (STARTER, nodo): STD -> passa a EONE_ODA; URG -> passa a ODA_URGENTE;
+     *                             REC -> avvia RECLAMO in parallelo e prosegue al 20; RIV -> torna al documento (fine negativa)
+     *   20 Verifica (STARTER) -> fine
+     */
+    void defineStartProcesses() {
+        if (b.defs().processType(AVVIO).isPresent()) return;
+        b.defineType(new ProcessType(AVVIO, "Avvio approvazione OdA", "F", false, false, false));
+        b.defineType(new ProcessType(ODA_URG, "OdA urgente", "F", false, false, false));
+        b.defineType(new ProcessType(RECLAMO, "Reclamo fornitore", "F", false, false, false));
+        TaskDef start = task(4001, "Avvio del processo di approvazione", null, 0, AssigneeMode.STARTER)
+                .withOptions(List.of(
+                        OptionDef.handoff("STD", "Approvazione standard", ODA),
+                        OptionDef.handoff("URG", "Approvazione urgente", ODA_URG),
+                        OptionDef.parallel("REC", "Apri anche un reclamo", RECLAMO),
+                        OptionDef.reject("RIV", "Torna al documento")));
+        b.activate(new ProcessVersion(40, AVVIO, 1, null, List.of(
+                new StepDef(10, true, JoinPolicy.ALL, 20, null, null, List.of(start)),
+                new StepDef(20, false, JoinPolicy.ALL, null, null, null,
+                        List.of(task(4002, "Verifica", null, 0, AssigneeMode.STARTER))))));
+        b.activate(new ProcessVersion(41, ODA_URG, 1, null, List.of(
+                new StepDef(10, true, JoinPolicy.ALL, null, null, null,
+                        List.of(task(4101, "Rilascio urgente", "RESPONSABILE_ACQ_L2", 200, AssigneeMode.RULES))))));
+        b.activate(new ProcessVersion(42, RECLAMO, 1, null, List.of(
+                new StepDef(10, true, JoinPolicy.ALL, null, null, null,
+                        List.of(task(4201, "Gestione reclamo", null, 0, AssigneeMode.STARTER))))));
+    }
+
+    ProcessInstance startAvvio(String ebeln, String amountEur) {
+        defineStartProcesses();
+        purchaseOrders.value(ebeln, Money.of(amountEur, "EUR"));
+        return engine.start(new Requests.Start(AVVIO, ebeln, null, ROSSI, null));
+    }
+
+    /** Il processo avviato da "parentId" con quel tipo di collegamento. */
+    ProcessInstance childOf(long parentId, String linkType) {
+        List<ProcessLink> l = store.links(parentId).stream()
+                .filter(x -> x.parentId() == parentId && x.linkType().equals(linkType)).toList();
+        if (l.size() != 1) throw new AssertionError("Atteso 1 figlio " + linkType + " di " + parentId + ", trovati " + l.size());
+        return store.process(l.get(0).childId()).orElseThrow();
+    }
+
     ProcessInstance startOda(String ebeln, String amountEur) {
         purchaseOrders.value(ebeln, Money.of(amountEur, "EUR"));
         return engine.start(new Requests.Start(ODA, ebeln, null, ROSSI, null));

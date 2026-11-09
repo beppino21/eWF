@@ -135,6 +135,18 @@ class PostgresWorkflowEngineTest extends WorkflowEngineContract {
         assertTrue(f.b.defs().activeVersion("ROTTO").isEmpty());
     }
 
+    @Test
+    void opzioneVersoUnTipoProcessoInesistenteBloccaLAttivazione() {
+        f.b.defineType(new ProcessType("AVVIO_X", "Avvio", "F", false, false, false));
+        TaskDef n = new TaskDef(1, 0, "Avvio", null, 0, AssigneeMode.STARTER, null, false, null, PreviewMode.NAME,
+                Interaction.WEB, null, List.of()).withOptions(List.of(
+                OptionDef.handoff("STD", "Standard", "NON_ESISTE"), OptionDef.reject("RIV", "Rivedi")));
+        it.eone.ewf.engine.jdbc.JdbcException e = assertThrows(it.eone.ewf.engine.jdbc.JdbcException.class,
+                () -> f.b.activate(new ProcessVersion(1, "AVVIO_X", 1, null,
+                        List.of(new StepDef(10, true, JoinPolicy.ALL, null, null, null, List.of(n))))));
+        assertTrue(e.getMessage().contains("NON_ESISTE"), e.getMessage());
+    }
+
     /** Esegue due operazioni nello stesso istante; restituisce risultato o eccezione di ciascuna. */
     private static List<Object> race(Supplier<?> a, Supplier<?> b) throws Exception {
         ExecutorService pool = Executors.newFixedThreadPool(2);

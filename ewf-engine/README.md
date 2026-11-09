@@ -96,6 +96,25 @@ Approva e Respingi non sono disponibili e l'utente deve scegliere un'opzione (`c
   accorciare un percorso).
 - `preview` si ferma al primo nodo non ancora deciso.
 
+## Opzioni che avviano un processo collegato
+
+Un'opzione può indicare un **tipo processo da avviare sullo stesso documento**:
+
+- **HANDOFF** (passaggio di consegne): il processo corrente si chiude come `FORWARDED` (non è
+  un'approvazione: nessuna azione di fine) e parte il nuovo. Caso tipico: il processo di sola
+  "Avvio", in cui l'autore sceglie quale approvazione far partire o torna al documento.
+- **PARALLEL**: il processo corrente prosegue per la sua strada e il nuovo vive accanto.
+
+Regole:
+- prima di eseguire qualunque cosa il motore verifica che il nuovo processo possa partire
+  (tipo attivo, documento leggibile, nessun processo aperto dello stesso tipo): se no, la scelta
+  è rifiutata con il motivo e il nodo resta aperto;
+- il richiedente del nuovo processo è quello del processo corrente; chi ha scelto resta
+  nel collegamento (`process_link`: `HO` / `PA`) e nell'audit (`PROCESS_SPAWNED`, `PROCESS_FORWARDED`);
+- `optionPreview(taskId, opzione)` mostra la catena di approvazione che l'opzione avvierebbe,
+  senza avviare nulla; `previewStart(tipo, documento, richiedente)` fa lo stesso per qualsiasi processo;
+- il sottoprocesso "in attesa" (il padre aspetta l'esito del figlio) non c'è ancora.
+
 ## Test
 
 `WorkflowEngineTest` riproduce il processo `EONE_ODA` del sistema di riferimento
@@ -131,8 +150,8 @@ paralleli chiusi insieme). Senza configurazione i test PostgreSQL vengono **salt
 Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`: mai usare `ewf`):
 
 1. in psql come `postgres`: `CREATE DATABASE ewf_test OWNER ewf_owner ENCODING 'UTF8' TEMPLATE template0;`
-2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.9.sql'`
-   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.8_to_0.9.sql`)
+2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.10.sql'`
+   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.9_to_0.10.sql`)
 3. variabili d'ambiente (in Eclipse: *Run Configurations → scheda Environment*):
    `EWF_TEST_DB_URL=jdbc:postgresql://localhost:5432/ewf_test`,
    `EWF_TEST_DB_USER=ewf_owner`, `EWF_TEST_DB_PASSWORD=...`
@@ -140,8 +159,8 @@ Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`
 ## Database
 
 Cartella `db/`:
-- `ewf_schema_v0.9.sql` – schema completo per un DB nuovo;
-- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.9), da applicare in ordine.
+- `ewf_schema_v0.10.sql` – schema completo per un DB nuovo;
+- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.10), da applicare in ordine.
 
 ## Limiti noti
 

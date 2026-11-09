@@ -161,7 +161,40 @@ public final class WorkflowEngine {
     public List<OptionEntry> options(long taskId) {
         TaskInstance t = requireTask(taskId);
         TaskDef td = defs.version(requireProcess(t.processId).versionId).task(t.taskDefId);
-        return td.options().stream().map(o -> new OptionEntry(o.code(), o.label(), o.reject())).toList();
+        return td.options().stream()
+                .map(o -> new OptionEntry(o.code(), o.label(), o.reject(), o.startProcess(), o.spawnMode())).toList();
+    }
+
+    /**
+     * Anteprima del processo che un'opzione avvierebbe sullo stesso documento: catena di approvazione
+     * calcolata senza avviare nulla (documento letto adesso, richiedente = quello del processo corrente).
+     * Vuota se l'opzione non avvia un processo.
+     */
+    public List<PreviewEntry> optionPreview(long taskId, String optionCode) {
+        TaskInstance t = requireTask(taskId);
+        ProcessInstance p = requireProcess(t.processId);
+        OptionDef o = defs.version(p.versionId).task(t.taskDefId).option(optionCode)
+                .orElseThrow(() -> EngineException.of(Code.NOT_FOUND, "Opzione %s inesistente", optionCode));
+        if (o.startProcess() == null) return List.of();
+        return previewStart(o.startProcess(), p.documentKey, p.startedBy);
+    }
+
+    /** Anteprima di un processo non ancora avviato: chi approverebbe, in che ordine. */
+    public List<PreviewEntry> previewStart(String processType, String documentKey, long starterId) {
+        ProcessType pt = startableType(processType);
+        ProcessVersion v = defs.activeVersion(pt.code())
+                .orElseThrow(() -> EngineException.of(Code.NO_ACTIVE_VERSION, "Nessuna versione attiva per %s", pt.code()));
+        Optional<DocumentInfo> doc = readDocument(pt, documentKey);
+        ProcessInstance h = new ProcessInstance();                      // ipotetico: non salvato
+        h.processTypeCode = pt.code();
+        h.docType = pt.docType();
+        h.documentKey = documentKey;
+        h.startedBy = starterId;
+        h.value = doc.map(DocumentInfo::value).orElse(null);
+        h.docContext = doc.map(DocumentInfo::context).orElse(Map.of());
+        StepDef first = v.firstStep();
+        Integer from = pt.noFirstStep() ? first.nextOk() : first.stepNo();
+        return chain(h, v, from, List.of(), Map.of());
     }
 
     /** Scelte del processo: per ogni nodo, l'opzione dell'ultimo task chiuso su quel nodo. */
@@ -212,6 +245,19 @@ public final class WorkflowEngine {
         Actor actor = system ? Actor.systemActor() : actorOf(actorId, prep.asSubst());
         String actionName = prep.action().name();
 
+        // opzione che avvia un processo: si verifica PRIMA di eseguire qualsiasi cosa, cosi' non succede
+        // mai che il processo corrente sia chiuso (o abbia agito in SAP) e il nuovo non possa partire
+        OptionDef spawn = prep.option() != null && prep.option().startProcess() != null ? prep.option() : null;
+        Optional<DocumentInfo> spawnDoc = Optional.empty();
+        if (spawn != null) {
+            try {
+                spawnDoc = checkSpawn(prep.p(), spawn);
+            } catch (EngineException e) {
+                reopen(prep.t().id, "SPAWN_REFUSED", e.getMessage());
+                return new Outcome(Outcome.Result.REJECTED, e.getMessage(), ProcessStatus.RUNNING, List.of());
+            }
+        }
+
         // BEFORE_ACTION: controlli (ex FM_EXANTE). KO o UNKNOWN bloccano l'azione.
         for (HookDef h : prep.td().hooks(HookEvent.BEFORE_ACTION)) {
             Executed ex = invoke(prep.p(), prep.t(), Contract.TASK_ACTION, HookEvent.BEFORE_ACTION, h.handlerCode(),
@@ -249,11 +295,79 @@ public final class WorkflowEngine {
                 }
             }
         }
-        return complete(prep.t().id, directives, lastExecId);
+        if (spawn == null) return complete(prep.t().id, directives, lastExecId);
+
+        if (spawn.spawnMode() == SpawnMode.PARALLEL) {
+            // prima il figlio: se non parte, il task torna aperto e il processo corrente non si muove
+            ProcessInstance child;
+            try {
+                child = spawnChild(prep.p(), spawn, spawnDoc, actorId, system);
+            } catch (EngineException e) {
+                reopen(prep.t().id, "SPAWN_FAILED", e.getMessage());
+                return new Outcome(Outcome.Result.REJECTED, e.getMessage(), ProcessStatus.RUNNING, List.of());
+            }
+            Outcome o = complete(prep.t().id, directives, lastExecId);
+            return new Outcome(o.result(), "Avviato processo " + child.id + " (" + spawn.startProcess() + ")",
+                    o.processStatus(), o.newTaskIds());
+        }
+
+        // HANDOFF: il processo corrente si chiude come FORWARDED, poi parte il nuovo
+        Outcome closed = complete(prep.t().id, directives, lastExecId, spawn);
+        if (closed.processStatus() != ProcessStatus.FORWARDED) return closed;    // superato da un parallelo/annullo
+        try {
+            ProcessInstance child = spawnChild(prep.p(), spawn, spawnDoc, actorId, system);
+            return new Outcome(Outcome.Result.DONE, "Passato al processo " + child.id + " (" + spawn.startProcess() + ")",
+                    ProcessStatus.FORWARDED, List.of());
+        } catch (EngineException e) {
+            // raro (verificato prima): qualcuno ha avviato lo stesso processo nel frattempo, o SAP e' caduto ora
+            tx.run(() -> {
+                ProcessInstance x = requireProcess(prep.p().id);
+                x.status = ProcessStatus.ERROR;
+                x.statusReason = "FORWARD_FAILED: " + e.getMessage();
+                store.updateProcess(x);
+                audit("FORWARD_FAILED", system ? null : actorId, system ? "SYSTEM" : "USER", x.id, prep.t().id,
+                        Map.of("process", spawn.startProcess(), "error", String.valueOf(e.getMessage())));
+            });
+            return new Outcome(Outcome.Result.UNKNOWN, e.getMessage(), ProcessStatus.ERROR, List.of());
+        }
+    }
+
+    /** Il processo indicato dall'opzione puo' partire adesso? Restituisce la lettura del documento. */
+    private Optional<DocumentInfo> checkSpawn(ProcessInstance parent, OptionDef o) {
+        ProcessType pt = startableType(o.startProcess());
+        defs.activeVersion(pt.code())
+                .orElseThrow(() -> EngineException.of(Code.NO_ACTIVE_VERSION, "Nessuna versione attiva per %s", pt.code()));
+        requireActiveUser(parent.startedBy);
+        boolean sameAsParent = o.isHandoff() && pt.code().equals(parent.processTypeCode);
+        if (!sameAsParent && store.hasOpenProcess(pt.code(), pt.docType(), parent.documentKey, parent.backendCode))
+            throw EngineException.of(Code.DUPLICATE_PROCESS,
+                    "Processo %s gia' aperto per il documento %s", pt.code(), parent.documentKey);
+        return readDocument(pt, parent.documentKey);
+    }
+
+    /** Avvia il figlio: stesso documento, richiedente del padre; chi ha scelto resta nel collegamento e nell'audit. */
+    private ProcessInstance spawnChild(ProcessInstance parent, OptionDef o, Optional<DocumentInfo> doc,
+                                       long actorId, boolean system) {
+        ProcessType pt = startableType(o.startProcess());
+        ProcessInstance child = start(new Start(pt.code(), parent.documentKey, parent.backendCode, parent.startedBy, null),
+                pt, doc);
+        tx.run(() -> {
+            store.insertLink(new ProcessLink(parent.id, child.id,
+                    o.isHandoff() ? ProcessLink.HANDOFF : ProcessLink.PARALLEL));
+            audit("PROCESS_SPAWNED", system ? null : actorId, system ? "SYSTEM" : "USER", parent.id, null,
+                    Map.of("child", String.valueOf(child.id), "process", pt.code(), "mode", o.spawnMode().name(),
+                            "option", o.code()));
+        });
+        return child;
     }
 
     /** Chiude il task in EXECUTING applicando l'azione registrata in task.action, poi avanza. */
     private Outcome complete(long taskId, List<Directive> directives, Long sourceExecId) {
+        return complete(taskId, directives, sourceExecId, null);
+    }
+
+    /** handoff != null: invece di avanzare, il processo si chiude come FORWARDED (nessuna azione di fine). */
+    private Outcome complete(long taskId, List<Directive> directives, Long sourceExecId, OptionDef handoff) {
         record Next(Integer step, boolean go, Activation activation, ProcessStatus status, String message) {
             Next(Integer step, boolean go, Activation activation, ProcessStatus status) {
                 this(step, go, activation, status, null);
@@ -291,6 +405,17 @@ public final class WorkflowEngine {
             Long actor = t.actedById;
             Activation act = new Activation(actor, t.assigneeId);
 
+            if (handoff != null) {
+                cancel(siblings, p.id, "FORWARDED");
+                p.status = ProcessStatus.FORWARDED;
+                p.statusReason = "Passato a " + handoff.startProcess();
+                p.endedAt = now();
+                p.endedBy = actor;
+                store.updateProcess(p);
+                audit("PROCESS_FORWARDED", actor, actor == null ? "SYSTEM" : "USER", p.id, t.id,
+                        Map.of("process", handoff.startProcess(), "option", handoff.code()));
+                return new Next(null, false, act, p.status);
+            }
             if (action == Action.OK) {
                 if (!siblings.isEmpty() && step.join() == JoinPolicy.ALL)
                     return new Next(null, false, act, p.status);          // aspetta gli altri paralleli
@@ -512,11 +637,15 @@ public final class WorkflowEngine {
         if (current.isEmpty()) return List.of();
         StepDef currentStep = v.stepDefOf(current.get().taskDefId);
         if (currentStep.isChoiceNode()) return List.of();      // il seguito dipende dall'opzione che verra' scelta
-        Map<Integer, StepState> states = store.stepStates(p.id);
-        Collection<String> chosen = choicesOf(p.id).values();
+        return chain(p, v, currentStep.nextOk(), choicesOf(p.id).values(), store.stepStates(p.id));
+    }
+
+    /** Percorso di approvazione previsto a partire dallo step "from" (incluso). */
+    private List<PreviewEntry> chain(ProcessInstance p, ProcessVersion v, Integer from, Collection<String> chosen,
+                                     Map<Integer, StepState> states) {
         List<PreviewEntry> out = new ArrayList<>();
         Set<Integer> seen = new HashSet<>();
-        Integer n = currentStep.nextOk();
+        Integer n = from;
         while (n != null && seen.add(n)) {
             StepDef s = v.resolve(n, chosen).orElse(null);
             if (s == null) break;

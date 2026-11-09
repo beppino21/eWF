@@ -174,6 +174,9 @@ public final class ProcessVersion {
                 if (d.isChoice() && d.options().size() < 2)
                     out.add(Problem.warning(s.stepNo(), "nodo di scelta con una sola opzione"));
                 for (OptionDef o : d.options()) {
+                    if (o.isHandoff() && o.reject())
+                        out.add(Problem.error(s.stepNo(), "opzione " + o.code()
+                                + ": il passaggio di consegne chiude il processo, non puo' essere anche un rifiuto"));
                     Integer prev = seenCodes.putIfAbsent(o.code(), s.stepNo());
                     if (prev != null)
                         out.add(Problem.error(s.stepNo(), "opzione " + o.code() + " gia' usata allo step " + prev
@@ -223,6 +226,7 @@ public final class ProcessVersion {
                 for (OptionDef o : s.tasks().get(0).options()) {
                     Map<Integer, String> next = new TreeMap<>(ps.choices());
                     next.put(s.stepNo(), o.code());
+                    if (o.isHandoff()) continue;                     // il processo finisce qui (FORWARDED)
                     Integer target = o.reject() ? s.nextKo() : s.nextOk();
                     if (target != null) todo.push(new PathState(target, Map.copyOf(next)));
                 }

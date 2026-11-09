@@ -148,7 +148,8 @@ public final class JdbcDefinitionStore implements DefinitionStore {
             }
             Map<Long, List<OptionDef>> options = new HashMap<>();
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT o.task_def_id, o.option_code, o.label, o.reject, h.code AS handler
+                    SELECT o.task_def_id, o.option_code, o.label, o.reject, h.code AS handler,
+                           o.start_process_type, o.spawn_mode
                       FROM ewf_core.task_option o
                       JOIN ewf_core.task_def t ON t.id = o.task_def_id
                       JOIN ewf_core.step_def s ON s.id = t.step_id
@@ -161,7 +162,9 @@ public final class JdbcDefinitionStore implements DefinitionStore {
                         options.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>()).add(new OptionDef(
                                 rs.getString("option_code"), rs.getString("label"), rs.getBoolean("reject"),
                                 rs.getString("handler"),
-                                optionConfigs.getOrDefault(rs.getLong(1) + "|" + rs.getString("option_code"), Map.of())));
+                                optionConfigs.getOrDefault(rs.getLong(1) + "|" + rs.getString("option_code"), Map.of()),
+                                rs.getString("start_process_type"),
+                                rs.getString("spawn_mode") == null ? null : SpawnMode.valueOf(rs.getString("spawn_mode"))));
                     }
                 }
             }

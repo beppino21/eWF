@@ -105,4 +105,18 @@ class ProcessVersionBranchesTest {
         assertEquals(List.of(), errors(pv));
         assertEquals(Map.of(), Map.of());
     }
+
+    @Test
+    void passaggioDiConsegneChiudeIlPercorsoENonPuoEssereUnRifiuto() {
+        TaskDef n = t("Avvio").withOptions(List.of(OptionDef.handoff("STD", "Standard", "ODA"),
+                OptionDef.reject("RIV", "Rivedi")));
+        ProcessVersion ok = new ProcessVersion(1, "X", 1, null, List.of(new StepDef(10, true, JoinPolicy.ALL, 30, null,
+                null, List.of(n))));
+        assertEquals(List.of(), errors(ok), "STD chiude il processo (handoff), RIV finisce in negativo: lo step 30 non serve");
+
+        TaskDef bad = t("Avvio").withOptions(List.of(
+                new OptionDef("X1", "x", true, null, null, "ODA", SpawnMode.HANDOFF), OptionDef.of("X2", "y")));
+        ProcessVersion pv = new ProcessVersion(1, "X", 1, null, List.of(s(10, null, null, bad)));
+        assertTrue(errors(pv).stream().anyMatch(e -> e.contains("non puo' essere anche un rifiuto")), errors(pv).toString());
+    }
 }

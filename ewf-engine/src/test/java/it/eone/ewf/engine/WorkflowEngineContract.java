@@ -614,4 +614,96 @@ abstract class WorkflowEngineContract {
                 "l'amministratore non puo' piu' approvare al posto di BIANCHI");
         f.ok(moved, BIANCHI);
     }
+
+    // ------------------------------------------------------------------
+    // Opzioni che avviano un processo collegato
+    // ------------------------------------------------------------------
+
+    @Test
+    void passaggioDiConsegneChiudeLAvvioEFaPartireLOda() {
+        ProcessInstance avvio = f.startAvvio("4500000700", "1000");
+        TaskInstance node = f.openTask(avvio.id);
+        Requests.Outcome o = f.choose(node.id, ROSSI, "STD");
+        assertEquals(ProcessStatus.FORWARDED, f.status(avvio.id), "instradato, non approvato");
+        assertTrue(o.message().contains(ODA), o.message());
+
+        ProcessInstance oda = f.childOf(avvio.id, ProcessLink.HANDOFF);
+        assertEquals(ODA, oda.processTypeCode);
+        assertEquals("4500000700", oda.documentKey);
+        assertEquals(ProcessStatus.RUNNING, oda.status);
+        assertEquals(ROSSI, oda.startedBy);
+        assertTrue(f.released.isEmpty(), "nessuna azione di fine sull'avvio");
+        assertTrue(f.b.auditTypes(avvio.id).containsAll(List.of("PROCESS_FORWARDED", "PROCESS_SPAWNED")));
+    }
+
+    @Test
+    void ilFiglioHaIlRichiedenteDelPadreAncheSeSceglieUnAltro() {
+        ProcessInstance avvio = f.startAvvio("4500000701", "1000");
+        long moved = f.engine.move(f.openTask(avvio.id).id, ROSSI, BIANCHI, "Decidi tu");
+        f.choose(moved, BIANCHI, "URG");
+        ProcessInstance urg = f.childOf(avvio.id, ProcessLink.HANDOFF);
+        assertEquals(ODA_URG, urg.processTypeCode);
+        assertEquals(ROSSI, urg.startedBy, "richiedente = chi ha avviato il processo di avvio");
+        assertEquals(Long.valueOf(NERI), f.openTask(urg.id).assigneeId);
+    }
+
+    @Test
+    void seIlProcessoNonPuoPartireLaSceltaVieneRifiutata() {
+        ProcessInstance avvio = f.startAvvio("4500000702", "1000");
+        f.engine.start(new Requests.Start(ODA, "4500000702", null, ROSSI, null));   // gia' aperto per vie traverse
+        TaskInstance node = f.openTask(avvio.id);
+        Requests.Outcome o = f.choose(node.id, ROSSI, "STD");
+        assertEquals(Requests.Outcome.Result.REJECTED, o.result());
+        assertTrue(o.message().contains("gia' aperto"), o.message());
+        assertEquals(ProcessStatus.RUNNING, f.status(avvio.id), "l'avvio resta dov'era");
+        assertEquals(TaskStatus.OPEN, f.openTask(avvio.id).status);
+        assertTrue(f.store.links(avvio.id).isEmpty());
+    }
+
+    @Test
+    void sistemaIrraggiungibileAlMomentoDellaScelta() {
+        ProcessInstance avvio = f.startAvvio("4500000703", "1000");
+        TaskInstance node = f.openTask(avvio.id);
+        f.purchaseOrders.offline(true);
+        Requests.Outcome o = f.choose(node.id, ROSSI, "STD");
+        f.purchaseOrders.offline(false);
+        assertEquals(Requests.Outcome.Result.REJECTED, o.result());
+        assertEquals(ProcessStatus.RUNNING, f.status(avvio.id));
+        assertEquals(TaskStatus.OPEN, f.openTask(avvio.id).status);
+    }
+
+    @Test
+    void paralleloIlPadreProsegueEIlFiglioViveAccanto() {
+        ProcessInstance avvio = f.startAvvio("4500000704", "1000");
+        f.choose(f.openTask(avvio.id).id, ROSSI, "REC");
+        assertEquals(20, f.openTask(avvio.id).stepNo, "il padre prosegue al suo step successivo");
+        ProcessInstance rec = f.childOf(avvio.id, ProcessLink.PARALLEL);
+        assertEquals(RECLAMO, rec.processTypeCode);
+        assertEquals(ProcessStatus.RUNNING, rec.status);
+        f.ok(f.openTask(avvio.id).id, ROSSI);
+        assertEquals(ProcessStatus.COMPLETED, f.status(avvio.id));
+        assertEquals(ProcessStatus.RUNNING, f.status(rec.id), "vite indipendenti");
+    }
+
+    @Test
+    void tornareAlDocumentoChiudeInNegativoSenzaFigli() {
+        ProcessInstance avvio = f.startAvvio("4500000705", "1000");
+        f.choose(f.openTask(avvio.id).id, ROSSI, "RIV");
+        assertEquals(ProcessStatus.REJECTED, f.status(avvio.id));
+        assertTrue(f.store.links(avvio.id).isEmpty());
+    }
+
+    @Test
+    void anteprimaDelleOpzioniSenzaAvviareNulla() {
+        ProcessInstance avvio = f.startAvvio("4500000706", "60000");
+        TaskInstance node = f.openTask(avvio.id);
+        List<Integer> std = f.engine.optionPreview(node.id, "STD").stream().map(Requests.PreviewEntry::stepNo).toList();
+        assertEquals(List.of(10, 20, 30, 40), std, "60.000 EUR: tutti i livelli dell'OdA");
+        List<Requests.PreviewEntry> urg = f.engine.optionPreview(node.id, "URG");
+        assertEquals(1, urg.size());
+        assertEquals("Sara Neri", urg.get(0).assignee());
+        assertTrue(f.engine.optionPreview(node.id, "RIV").isEmpty());
+        assertTrue(f.store.links(avvio.id).isEmpty(), "nessun processo avviato dall'anteprima");
+        assertEquals(ProcessStatus.RUNNING, f.status(avvio.id));
+    }
 }

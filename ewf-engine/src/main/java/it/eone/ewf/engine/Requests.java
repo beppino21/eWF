@@ -2,6 +2,7 @@ package it.eone.ewf.engine;
 
 import it.eone.ewf.engine.model.Money;
 import it.eone.ewf.engine.model.ProcessStatus;
+import it.eone.ewf.engine.model.SpawnMode;
 
 import java.util.List;
 
@@ -27,7 +28,7 @@ public final class Requests {
     public record PreviewEntry(int stepNo, String taskText, String roleCode, String assignee, String note) {}
 
     /** Opzione proposta all'utente su un nodo di scelta. */
-    public record OptionEntry(String code, String label, boolean reject) {}
+    public record OptionEntry(String code, String label, boolean reject, String startProcess, SpawnMode spawnMode) {}
 
     public record InboxEntry(long taskId, long processId, Reason reason) {
         public enum Reason { OWN, SUBSTITUTE, TEAM }
