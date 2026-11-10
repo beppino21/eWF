@@ -79,6 +79,7 @@ final class PostgresBackend implements Backend {
     @Override public void addRule(AssignmentRule r) { org.addRule(r); }
     @Override public void removeRules(String role) { org.deleteRules(role); }
     @Override public void defineType(ProcessType t) { defWriter.saveType(t); }
+    @Override public void addStartRule(it.eone.ewf.engine.model.StartRule r) { defWriter.addStartRule(r); }
     @Override public long activate(ProcessVersion v) { return defWriter.saveVersion(v, true); }
 
     int countAudit(String type) {

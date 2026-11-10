@@ -24,6 +24,12 @@
       <artifactId>ewf-engine</artifactId>
       <version>0.1.0-SNAPSHOT</version>
     </dependency>
+    <!-- libreria comune e-One: scheduler, storico, stato di sincronizzazione (mvn install di eone-connect prima) -->
+    <dependency>
+      <groupId>it.eone</groupId>
+      <artifactId>eone-connect</artifactId>
+      <version>0.1.0-SNAPSHOT</version>
+    </dependency>
     <!-- Stesse coordinate del PoC (gia' nel repository Maven locale).
          provided: a runtime JCo deve essere il sapjco3.jar ORIGINALE (non rinominato)
          con la sua sapjco3.dll, es. nella lib di Tomcat. -->

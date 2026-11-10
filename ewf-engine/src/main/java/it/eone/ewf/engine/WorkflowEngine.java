@@ -94,7 +94,7 @@ public final class WorkflowEngine {
     private ProcessInstance start(Start req, ProcessType pt, Optional<DocumentInfo> doc) {
         ProcessVersion v = defs.activeVersion(pt.code())
                 .orElseThrow(() -> EngineException.of(Code.NO_ACTIVE_VERSION, "Nessuna versione attiva per %s", pt.code()));
-        requireActiveUser(req.starterId());
+        if (req.starterId() != null) requireActiveUser(req.starterId());
 
         Money value = req.value() != null ? req.value() : doc.map(DocumentInfo::value).orElse(null);
         Map<String, String> context = doc.map(DocumentInfo::context).orElse(Map.of());
@@ -111,6 +111,7 @@ public final class WorkflowEngine {
             n.backendCode = req.backend();
             n.value = value;
             n.docContext = context;
+            n.docItems = doc.map(DocumentInfo::items).orElse(List.of());
             n.startedBy = req.starterId();
             n.startedAt = now();
             try {
@@ -124,8 +125,9 @@ public final class WorkflowEngine {
             pl.put("document", req.documentKey());
             pl.put("documentCheck", doc.isPresent() ? "OK" : "NO_ADAPTER");
             if (value != null) pl.put("value", value.toString());
+            if (req.starterId() == null) pl.put("starter", "UNKNOWN");
             pl.putAll(context);
-            audit("PROCESS_STARTED", req.starterId(), "USER", n.id, null, pl);
+            audit("PROCESS_STARTED", req.starterId(), req.starterId() == null ? "SYSTEM" : "USER", n.id, null, pl);
             return n;
         });
 
@@ -133,7 +135,7 @@ public final class WorkflowEngine {
         Integer startStep = pt.noFirstStep() ? first.nextOk() : first.stepNo();
         List<TaskInstance> created = activateFrom(p.id, startStep, new Activation(req.starterId(), req.starterId()));
 
-        if (pt.autoOkFirst() && !pt.noFirstStep()) {
+        if (pt.autoOkFirst() && !pt.noFirstStep() && req.starterId() != null) {
             for (TaskInstance t : created) {
                 if (t.stepNo == first.stepNo() && !v.task(t.taskDefId).isChoice())
                     act(t.id, req.starterId(), Action.OK, null, "Approvazione automatica all'avvio", null, true);
@@ -180,7 +182,7 @@ public final class WorkflowEngine {
     }
 
     /** Anteprima di un processo non ancora avviato: chi approverebbe, in che ordine. */
-    public List<PreviewEntry> previewStart(String processType, String documentKey, long starterId) {
+    public List<PreviewEntry> previewStart(String processType, String documentKey, Long starterId) {
         ProcessType pt = startableType(processType);
         ProcessVersion v = defs.activeVersion(pt.code())
                 .orElseThrow(() -> EngineException.of(Code.NO_ACTIVE_VERSION, "Nessuna versione attiva per %s", pt.code()));
@@ -337,7 +339,7 @@ public final class WorkflowEngine {
         ProcessType pt = startableType(o.startProcess());
         defs.activeVersion(pt.code())
                 .orElseThrow(() -> EngineException.of(Code.NO_ACTIVE_VERSION, "Nessuna versione attiva per %s", pt.code()));
-        requireActiveUser(parent.startedBy);
+        if (parent.startedBy != null) requireActiveUser(parent.startedBy);
         boolean sameAsParent = o.isHandoff() && pt.code().equals(parent.processTypeCode);
         if (!sameAsParent && store.hasOpenProcess(pt.code(), pt.docType(), parent.documentKey, parent.backendCode))
             throw EngineException.of(Code.DUPLICATE_PROCESS,
@@ -572,25 +574,190 @@ public final class WorkflowEngine {
 
     /** Annulla il processo e lo riavvia sulla versione attiva, collegando i due. */
     public ProcessInstance restart(long processId, long actorId, String note) {
-        // il documento si rilegge PRIMA di annullare: se SAP non risponde, il vecchio processo resta com'e'
         ProcessInstance current = requireProcess(processId);
         ProcessType pt = startableType(current.processTypeCode);
-        Optional<DocumentInfo> doc = readDocument(pt, current.documentKey);
+        // il documento si rilegge PRIMA di annullare: se SAP non risponde, il vecchio processo resta com'e'
+        return restartInternal(current, pt, actorId, note, readDocument(pt, current.documentKey));
+    }
+
+    /** actorId null = riavvio deciso dal sistema (rilascio azzerato o documento modificato in SAP). */
+    private ProcessInstance restartInternal(ProcessInstance current, ProcessType pt, Long actorId, String note,
+                                            Optional<DocumentInfo> doc) {
+        long processId = current.id;
         ProcessInstance old = cancelInternal(processId, actorId, REASON_RESTARTED, note);
         ProcessInstance n = start(new Start(old.processTypeCode, old.documentKey, old.backendCode, old.startedBy, null),
                 pt, doc);
         tx.run(() -> {
             store.insertLink(new ProcessLink(old.id, n.id, ProcessLink.RESTART));
-            audit("PROCESS_RESTARTED", actorId, "USER", old.id, null, Map.of("newProcess", String.valueOf(n.id)));
+            audit("PROCESS_RESTARTED", actorId, actorId == null ? "SYSTEM" : "USER", old.id, null,
+                    Map.of("newProcess", String.valueOf(n.id)));
         });
         return n;
+    }
+
+    // =====================================================================
+    // Eventi del documento (coda degli avvii)
+    // =====================================================================
+
+    public static final String REASON_DOCUMENT_DELETED = "DOCUMENT_DELETED";
+
+    /**
+     * Elabora un evento della coda degli avvii. Non lancia eccezioni: ogni esito torna come EventResult,
+     * che la sorgente registra (ERROR = da ritentare, es. SAP non raggiungibile).
+     */
+    public EventResult onDocumentEvent(DocumentEvent e) {
+        try {
+            Long starter = null;
+            String warning = null;
+            if (e.sapUser() != null && !e.sapUser().isBlank()) {
+                starter = users.bySapUser(e.sapUser()).filter(User::active).map(User::id).orElse(null);
+                if (starter == null)
+                    warning = "Utente SAP " + e.sapUser() + " senza corrispondente eWF attivo: "
+                            + "i task del richiedente vanno al team di riserva";
+            }
+            List<ProcessInstance> open = store.openProcesses(e.docType(), e.documentKey(), e.backend());
+            return switch (e.type()) {
+                case CREATED -> open.isEmpty() ? startByRules(e, starter, warning)
+                        : done(e, "Processo gia' aperto sul documento (" + open.get(0).id + "): nessun nuovo avvio",
+                                open.get(0).id);
+                case RESET -> open.isEmpty() ? startByRules(e, starter, warning)
+                        : restartAll(e, open, "Rilascio azzerato nel sistema di origine");
+                case CHANGED -> open.isEmpty() ? done(e, "Nessun processo aperto: modifica ignorata", null)
+                        : changed(e, open);
+                case DELETED -> {
+                    for (ProcessInstance p : open)
+                        cancelInternal(p.id, null, REASON_DOCUMENT_DELETED, "Documento cancellato nel sistema di origine");
+                    yield done(e, open.isEmpty() ? "Nessun processo aperto"
+                            : open.size() + " processi annullati", open.isEmpty() ? null : open.get(0).id);
+                }
+            };
+        } catch (EngineException ex) {
+            return new EventResult(e.queueId(), EventResult.EventStatus.ERROR,
+                    "[" + ex.code() + "] " + ex.getMessage(), null);
+        } catch (RuntimeException ex) {
+            return new EventResult(e.queueId(), EventResult.EventStatus.ERROR, String.valueOf(ex.getMessage()), null);
+        }
+    }
+
+    private static EventResult done(DocumentEvent e, String message, Long processId) {
+        return new EventResult(e.queueId(), EventResult.EventStatus.DONE, message, processId);
+    }
+
+    /** Documento nuovo: la regola di avvio applicabile sceglie il processo. */
+    private EventResult startByRules(DocumentEvent e, Long starter, String warning) {
+        Optional<DocumentAdapter> adapter = adapters.find(e.docType());
+        Map<String, String> ctx = Map.of();
+        Optional<DocumentInfo> info = Optional.empty();
+        if (adapter.isPresent()) {
+            DocumentInfo d;
+            try {
+                d = adapter.get().read(e.documentKey());
+            } catch (RuntimeException ex) {
+                throw EngineException.of(Code.BACKEND_UNAVAILABLE, "Impossibile leggere il documento %s %s: %s",
+                        e.docType(), e.documentKey(), ex.getMessage());
+            }
+            if (!d.exists())
+                throw EngineException.of(Code.DOCUMENT_NOT_FOUND, "Documento %s %s non trovato%s", e.docType(),
+                        e.documentKey(), d.message() == null ? "" : ": " + d.message());
+            info = Optional.of(d);
+            ctx = d.context();
+        }
+        Map<String, String> context = ctx;
+        Optional<StartRule> rule = defs.startRules(e.docType()).stream()
+                .filter(r -> r.matches(context))
+                .max(Comparator.comparingInt(StartRule::priority)
+                        .thenComparingInt(r -> r.conditions().size())
+                        .thenComparing(Comparator.comparingLong(StartRule::id).reversed()));
+        if (rule.isEmpty())
+            return done(e, "Nessuna regola di avvio applicabile: il documento non richiede approvazione", null);
+        ProcessType pt = startableType(rule.get().processType());
+        ProcessInstance p = start(new Start(pt.code(), e.documentKey(), e.backend(), starter, null), pt, info);
+        String msg = "Avviato " + pt.code() + " (regola " + rule.get().id() + ")";
+        return warning == null ? done(e, msg, p.id)
+                : new EventResult(e.queueId(), EventResult.EventStatus.WARNING, msg + ". " + warning, p.id);
+    }
+
+    private EventResult restartAll(DocumentEvent e, List<ProcessInstance> open, String note) {
+        Long last = null;
+        for (ProcessInstance p : open) {
+            ProcessType pt = startableType(p.processTypeCode);
+            last = restartInternal(p, pt, null, note, readDocument(pt, p.documentKey)).id;
+        }
+        return done(e, "Riavviati " + open.size() + " processi: " + note, last);
+    }
+
+    /** Senza strategia di rilascio: riparte solo se valore o quantita' sono cambiati oltre la tolleranza. */
+    private EventResult changed(DocumentEvent e, List<ProcessInstance> open) {
+        Long last = null;
+        List<String> notes = new ArrayList<>();
+        for (ProcessInstance p : open) {
+            ProcessType pt = startableType(p.processTypeCode);
+            Optional<DocumentInfo> doc = readDocument(pt, p.documentKey);
+            if (doc.isEmpty()) {
+                notes.add(p.id + ": nessun adapter, modifica non valutabile");
+                continue;
+            }
+            String why = relevantChange(p, doc.get(), pt.changeTolerancePct());
+            if (why == null) {
+                auditTx("DOCUMENT_CHANGE_IGNORED", null, "SYSTEM", p.id, null,
+                        Map.of("tolerancePct", pt.changeTolerancePct().toPlainString()));
+                notes.add(p.id + ": modifica non rilevante");
+                last = p.id;
+            } else {
+                last = restartInternal(p, pt, null, "Documento modificato: " + why, doc).id;
+                notes.add(p.id + " riavviato (" + why + ")");
+            }
+        }
+        return done(e, String.join("; ", notes), last);
+    }
+
+    /**
+     * La modifica richiede di riapprovare? Confronto posizione per posizione, nell'ordine delle posizioni:
+     * la PRIMA che diverge (aggiunta, eliminata, quantita' o valore oltre la tolleranza) basta, le altre
+     * non si guardano. Mai sui totali: variazioni opposte su due posizioni si annullerebbero.
+     * Documenti senza posizioni: confronto del valore di testata. null = nessuna variazione rilevante.
+     */
+    static String relevantChange(ProcessInstance p, DocumentInfo now, java.math.BigDecimal tolerancePct) {
+        if (!p.docItems.isEmpty() || !now.items().isEmpty()) {
+            Map<String, DocItem> before = new TreeMap<>();
+            p.docItems.forEach(i -> before.put(i.key(), i));
+            Map<String, DocItem> after = new TreeMap<>();
+            now.items().forEach(i -> after.put(i.key(), i));
+            java.util.SortedSet<String> keys = new TreeSet<>(before.keySet());
+            keys.addAll(after.keySet());
+            for (String k : keys) {
+                DocItem b = before.get(k), a = after.get(k);
+                if (a == null) return "posizione " + k + " eliminata";
+                if (b == null) return "posizione " + k + " aggiunta";
+                String q = beyond(b.quantity(), a.quantity(), tolerancePct);
+                if (q != null) return "posizione " + k + " quantita' " + q;
+                String v = beyond(b.value(), a.value(), tolerancePct);
+                if (v != null) return "posizione " + k + " valore " + v;
+            }
+            return null;
+        }
+        String v = beyond(p.value == null ? null : p.value.amount(), now.value() == null ? null : now.value().amount(),
+                tolerancePct);
+        return v == null ? null : "valore " + v;
+    }
+
+    private static String beyond(java.math.BigDecimal before, java.math.BigDecimal after, java.math.BigDecimal tolPct) {
+        if (before == null && after == null) return null;
+        if (before == null || after == null) return (before == null ? "-" : before.toPlainString()) + " -> "
+                + (after == null ? "-" : after.toPlainString());
+        if (before.compareTo(after) == 0) return null;
+        java.math.BigDecimal delta = after.subtract(before).abs();
+        boolean over = tolPct.signum() == 0 || before.signum() == 0
+                || delta.multiply(java.math.BigDecimal.valueOf(100))
+                        .compareTo(before.abs().multiply(tolPct)) > 0;
+        return over ? before.toPlainString() + " -> " + after.toPlainString() : null;
     }
 
     public ProcessInstance cancel(long processId, long actorId, String note) {
         return cancelInternal(processId, actorId, "CANCELLED", note);
     }
 
-    private ProcessInstance cancelInternal(long processId, long actorId, String reason, String note) {
+    private ProcessInstance cancelInternal(long processId, Long actorId, String reason, String note) {
         return tx.inTransaction(() -> {
             ProcessInstance p = requireProcess(processId);
             if (!p.status.isOpen())
@@ -601,7 +768,7 @@ public final class WorkflowEngine {
             p.endedAt = now();
             p.endedBy = actorId;
             store.updateProcess(p);
-            audit("PROCESS_CANCELLED", actorId, "USER", p.id, null,
+            audit("PROCESS_CANCELLED", actorId, actorId == null ? "SYSTEM" : "USER", p.id, null,
                     note == null ? Map.of("reason", reason) : Map.of("reason", reason, "note", note));
             return p;
         });
@@ -671,7 +838,10 @@ public final class WorkflowEngine {
         String who = null;
         String note = null;
         switch (td.assigneeMode()) {
-            case STARTER -> who = users.byId(p.startedBy).map(User::displayName).orElse(null);
+            case STARTER -> {
+                who = p.startedBy == null ? null : users.byId(p.startedBy).map(User::displayName).orElse(null);
+                if (p.startedBy == null) note = "richiedente sconosciuto: team di riserva";
+            }
             case RULES -> {
                 Optional<AssignmentResolver.Assignment> a = resolver.resolve(new AssignmentResolver.Query(
                         p.processTypeCode, td.roleCode(), documentContext(p), p.value, today()));

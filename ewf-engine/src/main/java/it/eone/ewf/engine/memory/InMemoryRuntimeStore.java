@@ -43,6 +43,12 @@ public final class InMemoryRuntimeStore implements RuntimeStore {
         return Optional.ofNullable(processes.get(id)).map(ProcessInstance::copy);
     }
 
+    @Override public synchronized List<ProcessInstance> openProcesses(String docType, String key, String backend) {
+        return processes.values().stream().filter(p -> p.docType.equals(docType) && p.documentKey.equals(key)
+                        && Objects.equals(p.backendCode, backend) && p.status.isOpen())
+                .sorted(java.util.Comparator.comparingLong(p -> p.id)).map(ProcessInstance::copy).toList();
+    }
+
     @Override public synchronized boolean hasOpenProcess(String type, String docType, String key, String backend) {
         return processes.values().stream().anyMatch(p -> p.processTypeCode.equals(type) && p.docType.equals(docType)
                 && p.documentKey.equals(key) && Objects.equals(p.backendCode, backend) && p.status.isOpen());

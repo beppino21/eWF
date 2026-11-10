@@ -23,6 +23,9 @@ public interface RuntimeStore {
     Optional<ProcessInstance> process(long id);
     boolean hasOpenProcess(String processType, String docType, String documentKey, String backend);
 
+    /** Processi aperti (di qualsiasi tipo) sul documento, in ordine di avvio. */
+    List<ProcessInstance> openProcesses(String docType, String documentKey, String backend);
+
     TaskInstance insertTask(TaskInstance t);
     void updateTask(TaskInstance t);
     Optional<TaskInstance> task(long id);

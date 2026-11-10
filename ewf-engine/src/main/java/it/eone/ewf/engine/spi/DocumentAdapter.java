@@ -1,7 +1,9 @@
 package it.eone.ewf.engine.spi;
 
+import it.eone.ewf.engine.model.DocItem;
 import it.eone.ewf.engine.model.Money;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -24,14 +26,25 @@ public interface DocumentAdapter {
      * value   = valore per soglie e fasce (gia' nella divisa di riferimento), null se non significativo
      * context = attributi per le regole: purchasing_group, plant, storage_location, company_code, ...
      * message = testo per l'utente (es. motivo per cui non esiste)
+     * items   = posizioni non cancellate (chiave, quantita', valore): fotografate all'avvio e
+     *           confrontate una per una sulle modifiche senza strategia di rilascio
      */
-    record DocumentInfo(boolean exists, Money value, Map<String, String> context, String message) {
+    record DocumentInfo(boolean exists, Money value, Map<String, String> context, String message, List<DocItem> items) {
         public DocumentInfo {
             context = context == null ? Map.of() : Map.copyOf(context);
+            items = items == null ? List.of() : List.copyOf(items);
+        }
+
+        public DocumentInfo(boolean exists, Money value, Map<String, String> context, String message) {
+            this(exists, value, context, message, List.of());
         }
 
         public static DocumentInfo found(Money value, Map<String, String> context) {
             return new DocumentInfo(true, value, context, null);
+        }
+
+        public static DocumentInfo found(Money value, Map<String, String> context, List<DocItem> items) {
+            return new DocumentInfo(true, value, context, null, items);
         }
 
         public static DocumentInfo notFound(String message) {

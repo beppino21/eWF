@@ -44,6 +44,7 @@ public final class MigrationWriter {
         try {
             db.inTransaction(() -> {
                 requireNoProcesses();
+                List<String[]> startRules = readStartRules();   // non nascono dalla migrazione: si conservano
                 wipe();
                 JdbcOrgWriter org = new JdbcOrgWriter(db);
                 JdbcDefinitionWriter defs = new JdbcDefinitionWriter(db);
@@ -70,6 +71,9 @@ public final class MigrationWriter {
 
                 // processi: salvati in bozza, validati, attivati solo se senza errori
                 for (ProcessType t : plan.types) defs.saveType(t);
+                int[] kept = restoreStartRules(startRules);
+                written.put("Regole di avvio conservate", kept[0]);
+                if (kept[1] > 0) written.put("Regole di avvio scartate (processo non piu' presente)", kept[1]);
                 for (ProcessVersion v : plan.versions) {
                     long id = defs.saveVersion(v, false);
                     List<JdbcDefinitionWriter.Problem> problems = defs.validate(id);
@@ -111,12 +115,60 @@ public final class MigrationWriter {
             throw new IllegalStateException("Il DB contiene " + n + " processi: la migrazione richiede un DB senza processi avviati");
     }
 
+    /** doc_type, conditions, priority, process_type_code, active */
+    private List<String[]> readStartRules() {
+        return db.with(c -> {
+            List<String[]> out = new ArrayList<>();
+            try (Statement st = c.createStatement(); java.sql.ResultSet rs = st.executeQuery("""
+                    SELECT doc_type, conditions::text, priority, process_type_code, active
+                      FROM ewf_core.start_rule ORDER BY id""")) {
+                while (rs.next())
+                    out.add(new String[]{rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getString(5)});
+            }
+            return out;
+        });
+    }
+
+    /** Reinserisce le regole il cui processo esiste ancora; restituisce {conservate, scartate}. */
+    private int[] restoreStartRules(List<String[]> rules) {
+        return db.with(c -> {
+            int kept = 0, dropped = 0;
+            for (String[] r : rules) {
+                boolean typeExists;
+                try (java.sql.PreparedStatement ps = c.prepareStatement(
+                        "SELECT 1 FROM ewf_core.process_type WHERE code = ?")) {
+                    ps.setString(1, r[3]);
+                    try (java.sql.ResultSet rs = ps.executeQuery()) { typeExists = rs.next(); }
+                }
+                if (!typeExists) { dropped++; continue; }
+                try (java.sql.PreparedStatement ps = c.prepareStatement(
+                        "INSERT INTO ewf_core.doc_type(code, description) VALUES (?, ?) ON CONFLICT DO NOTHING")) {
+                    ps.setString(1, r[0]);
+                    ps.setString(2, r[0]);
+                    ps.executeUpdate();
+                }
+                try (java.sql.PreparedStatement ps = c.prepareStatement("""
+                        INSERT INTO ewf_core.start_rule(doc_type, conditions, priority, process_type_code, active)
+                        VALUES (?, ?::jsonb, ?, ?, ?)""")) {
+                    ps.setString(1, r[0]);
+                    ps.setString(2, r[1]);
+                    ps.setInt(3, Integer.parseInt(r[2]));
+                    ps.setString(4, r[3]);
+                    ps.setBoolean(5, Boolean.parseBoolean(r[4]) || "t".equals(r[4]));
+                    ps.executeUpdate();
+                }
+                kept++;
+            }
+            return new int[]{kept, dropped};
+        });
+    }
+
     /** Svuota definizioni e organizzazione (il runtime e' gia' vuoto). */
     private void wipe() {
         db.with(c -> {
             try (Statement st = c.createStatement()) {
                 st.execute("""
-                        TRUNCATE ewf_core.task_hook, ewf_core.task_option, ewf_core.task_def, ewf_core.step_def,
+                        TRUNCATE ewf_core.start_rule, ewf_core.task_hook, ewf_core.task_option, ewf_core.task_def, ewf_core.step_def,
                                  ewf_core.process_version, ewf_core.process_type, ewf_core.doc_type, ewf_core.handler,
                                  ewf_org.assignment_rule, ewf_org.assignment_exception, ewf_org.role_group_member,
                                  ewf_org.role_team_auth, ewf_org.user_process_auth, ewf_org.substitution,

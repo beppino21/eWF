@@ -2,6 +2,10 @@ package it.eone.ewf.engine.memory;
 
 import it.eone.ewf.engine.model.ProcessType;
 import it.eone.ewf.engine.model.ProcessVersion;
+import it.eone.ewf.engine.model.StartRule;
+
+import java.util.ArrayList;
+import java.util.List;
 import it.eone.ewf.engine.spi.DefinitionStore;
 
 import java.util.HashMap;
@@ -12,6 +16,13 @@ public final class InMemoryDefinitionStore implements DefinitionStore {
     private final Map<String, ProcessType> types = new HashMap<>();
     private final Map<Long, ProcessVersion> versions = new HashMap<>();
     private final Map<String, Long> active = new HashMap<>();
+    private final List<StartRule> startRules = new ArrayList<>();
+
+    public synchronized InMemoryDefinitionStore startRule(StartRule r) { startRules.add(r); return this; }
+
+    @Override public synchronized List<StartRule> startRules(String docType) {
+        return startRules.stream().filter(r -> r.docType().equals(docType)).toList();
+    }
 
     public InMemoryDefinitionStore type(ProcessType t) { types.put(t.code(), t); return this; }
 

@@ -13,7 +13,27 @@ public final class Requests {
     public enum Action { OK, KO }
 
     /** value opzionale: se null lo calcola l'adapter del tipo documento. */
-    public record Start(String processType, String documentKey, String backend, long starterId, Money value) {}
+    /** starterId null = richiedente sconosciuto (utente SAP non mappato): i suoi task vanno al team di riserva. */
+    public record Start(String processType, String documentKey, String backend, Long starterId, Money value) {}
+
+    /** Cosa e' successo a un documento nel sistema di origine (riga della coda degli avvii). */
+    public enum DocumentEventType {
+        /** Documento nuovo da approvare: eWF sceglie il processo con le regole di avvio. */
+        CREATED,
+        /** Il sistema di origine ha azzerato il rilascio (modifica rilevante secondo la strategia): si riapprova. */
+        RESET,
+        /** Documento modificato senza strategia di rilascio: eWF confronta valore e quantita' con l'avvio. */
+        CHANGED,
+        /** Documento cancellato: i processi aperti si annullano. */
+        DELETED
+    }
+
+    public record DocumentEvent(String queueId, String docType, String documentKey, String backend,
+                                DocumentEventType type, String sapUser) {}
+
+    public record EventResult(String queueId, EventStatus status, String message, Long processId) {
+        public enum EventStatus { DONE, WARNING, ERROR }
+    }
 
     /** expectedRowVersion opzionale: se valorizzato, protegge da doppio click / due utenti insieme. */
     public record Act(long taskId, long actorId, Action action, String note, Integer expectedRowVersion) {}

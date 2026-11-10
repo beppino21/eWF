@@ -11,12 +11,18 @@ FUNCTION /ewf/doc_info.
 *"     VALUE(E_MESSAGE)  TYPE  CHAR80
 *"  TABLES
 *"      ET_CONTEXT STRUCTURE  /EWF/S_ENG_KV
+*"      ET_ITEMS   STRUCTURE  /EWF/S_DOC_ITEM
 *"----------------------------------------------------------------------
 * Adattatore documento del motore eWF (sola lettura).
 * Restituisce: esistenza, valore (divisa standard del mandante, come
 * /EWF/WF_DOCVALUE) e attributi per le regole di assegnazione.
 * Riusa /EWF/WF_DOCVALUE e /EWF/WF_BUKRS_WERKS: i tipi documento gia'
 * aggiunti presso i clienti continuano a funzionare.
+*
+* ET_ITEMS: posizioni non cancellate (OdA, RdA) con quantita' e valore.
+*   eWF le fotografa all'avvio e, sulle modifiche senza strategia di
+*   rilascio, le confronta UNA PER UNA (mai i totali, che nasconderebbero
+*   variazioni opposte su posizioni diverse).
 *
 * E_EXISTS = 'X' documento presente e non cancellato
 *          = ' ' inesistente o cancellato (motivo in E_MESSAGE)
@@ -35,6 +41,11 @@ FUNCTION /ewf/doc_info.
         lv_doc32 TYPE char0032,
         lv_tp    TYPE char01,
         lv_err   TYPE char01,
+        lt_ekpo  TYPE STANDARD TABLE OF ekpo,
+        ls_ekpo  TYPE ekpo,
+        lt_eban  TYPE STANDARD TABLE OF eban,
+        ls_eban  TYPE eban,
+        ls_item  TYPE /ewf/s_doc_item,
         ls_kv    TYPE /ewf/s_eng_kv.
 
   DEFINE add_ctx.
@@ -47,7 +58,7 @@ FUNCTION /ewf/doc_info.
   END-OF-DEFINITION.
 
   CLEAR: e_exists, e_netwr, e_waers, e_message.
-  REFRESH et_context.
+  REFRESH: et_context, et_items.
 
 *--- 1. Esistenza e attributi di testata
   CASE i_tipodoc.
@@ -70,6 +81,19 @@ FUNCTION /ewf/doc_info.
       add_ctx 'EKORG' ls_ekko-ekorg.
       add_ctx 'LIFNR' ls_ekko-lifnr.
       add_ctx 'BSART' ls_ekko-bsart.
+*     posizioni non cancellate
+      SELECT * FROM ekpo INTO TABLE lt_ekpo
+        WHERE ebeln = lv_ebeln AND loekz = space
+        ORDER BY ebelp.
+      LOOP AT lt_ekpo INTO ls_ekpo.
+        CLEAR ls_item.
+        ls_item-item  = ls_ekpo-ebelp.
+        ls_item-menge = ls_ekpo-menge.
+        ls_item-meins = ls_ekpo-meins.
+        ls_item-netwr = ls_ekpo-netwr.
+        ls_item-waers = ls_ekko-waers.
+        APPEND ls_item TO et_items.
+      ENDLOOP.
 
     WHEN 'B'.                                          " RdA
       lv_banfn = i_document.
@@ -86,6 +110,20 @@ FUNCTION /ewf/doc_info.
       e_exists = 'X'.
       add_ctx 'EKGRP' lv_ekgrp.
       add_ctx 'LGORT' lv_lgort.
+      SELECT * FROM eban INTO TABLE lt_eban
+        WHERE banfn = lv_banfn AND loekz = space
+        ORDER BY bnfpo.
+      LOOP AT lt_eban INTO ls_eban.
+        CLEAR ls_item.
+        ls_item-item  = ls_eban-bnfpo.
+        ls_item-menge = ls_eban-menge.
+        ls_item-meins = ls_eban-meins.
+        IF ls_eban-peinh > 0.
+          ls_item-netwr = ls_eban-preis * ls_eban-menge / ls_eban-peinh.
+        ENDIF.
+        ls_item-waers = ls_eban-waers.
+        APPEND ls_item TO et_items.
+      ENDLOOP.
 
     WHEN 'FA' OR 'FI_DOC'.                             " documento contabile: SOCIETA ANNO NUMERO
 *     stesso formato chiave di /EWF/WF_DOCVALUE: bukrs(4) gjahr+5(4) belnr+10(10)

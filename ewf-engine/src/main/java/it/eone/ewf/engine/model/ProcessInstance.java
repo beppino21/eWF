@@ -17,7 +17,10 @@ public final class ProcessInstance {
     public Money value;
     /** Attributi del documento letti all'avvio (gruppo acquisti, divisione, ...): li usano le regole. */
     public Map<String, String> docContext = Map.of();
-    public long startedBy;
+    /** Posizioni del documento lette all'avvio: base del confronto per le modifiche senza strategia. */
+    public java.util.List<DocItem> docItems = java.util.List.of();
+    /** null = richiedente non noto (utente SAP senza corrispondente eWF). */
+    public Long startedBy;
     public Instant startedAt;
     public Long endedBy;
     public Instant endedAt;
@@ -28,7 +31,7 @@ public final class ProcessInstance {
         ProcessInstance c = new ProcessInstance();
         c.id = id; c.versionId = versionId; c.processTypeCode = processTypeCode; c.docType = docType;
         c.documentKey = documentKey; c.backendCode = backendCode; c.status = status; c.statusReason = statusReason;
-        c.value = value; c.docContext = docContext; c.startedBy = startedBy; c.startedAt = startedAt; c.endedBy = endedBy; c.endedAt = endedAt;
+        c.value = value; c.docContext = docContext; c.docItems = docItems; c.startedBy = startedBy; c.startedAt = startedAt; c.endedBy = endedBy; c.endedAt = endedAt;
         c.correlationKey = correlationKey; c.rowVersion = rowVersion;
         return c;
     }

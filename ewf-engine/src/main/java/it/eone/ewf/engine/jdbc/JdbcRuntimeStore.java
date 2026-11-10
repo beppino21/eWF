@@ -20,7 +20,8 @@ public final class JdbcRuntimeStore implements RuntimeStore {
     private static final String P_COLS = """
             id, version_id, process_type_code, backend_code, doc_type, document_key, status, status_reason,
             currency, net_value, started_at, started_by, ended_at, ended_by, correlation_key, row_version,
-            ARRAY(SELECT e.key || chr(31) || e.value FROM jsonb_each_text(doc_context) e) AS doc_context_kv""";
+            ARRAY(SELECT e.key || chr(31) || e.value FROM jsonb_each_text(doc_context) e) AS doc_context_kv,
+            ARRAY(SELECT e.key || chr(31) || e.value FROM jsonb_each_text(doc_items) e) AS doc_items_kv""";
 
     @Override
     public ProcessInstance insertProcess(ProcessInstance p) {
@@ -28,8 +29,8 @@ public final class JdbcRuntimeStore implements RuntimeStore {
             try (PreparedStatement ps = c.prepareStatement("""
                     INSERT INTO ewf_core.process_instance(version_id, process_type_code, backend_code, doc_type,
                            document_key, status, status_reason, currency, net_value, started_at, started_by,
-                           ended_at, ended_by, correlation_key, doc_context, row_version)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, 0) RETURNING id""")) {
+                           ended_at, ended_by, correlation_key, doc_context, doc_items, row_version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, 0) RETURNING id""")) {
                 ps.setLong(1, p.versionId);
                 ps.setString(2, p.processTypeCode);
                 ps.setString(3, p.backendCode);
@@ -40,11 +41,17 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                 ps.setString(8, p.value == null ? null : p.value.currency());
                 Sql.setBigDecimal(ps, 9, p.value == null ? null : p.value.amount());
                 Sql.setInstant(ps, 10, p.startedAt);
-                ps.setLong(11, p.startedBy);
+                Sql.setLong(ps, 11, p.startedBy);
                 Sql.setInstant(ps, 12, p.endedAt);
                 Sql.setLong(ps, 13, p.endedBy);
                 ps.setObject(14, p.correlationKey);
                 ps.setString(15, Sql.json(p.docContext));
+                // posizione -> "quantita'|valore" (vuoto = non noto)
+                Map<String, String> items = new LinkedHashMap<>();
+                for (DocItem i : p.docItems)
+                    items.put(i.key(), (i.quantity() == null ? "" : i.quantity().toPlainString()) + "|"
+                            + (i.value() == null ? "" : i.value().toPlainString()));
+                ps.setString(16, Sql.json(items));
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     p.id = rs.getLong(1);
@@ -121,7 +128,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
         p.statusReason = rs.getString("status_reason");
         p.value = Sql.getMoney(rs, "net_value", "currency");
         p.startedAt = Sql.getInstant(rs, "started_at");
-        p.startedBy = rs.getLong("started_by");
+        p.startedBy = Sql.getLong(rs, "started_by");
         p.endedAt = Sql.getInstant(rs, "ended_at");
         p.endedBy = Sql.getLong(rs, "ended_by");
         p.correlationKey = Sql.getUuid(rs, "correlation_key");
@@ -135,7 +142,39 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                 ctx.put(kv.substring(0, sep), kv.substring(sep + 1));
             }
         p.docContext = java.util.Map.copyOf(ctx);
+        List<DocItem> items = new ArrayList<>();
+        java.sql.Array ia = rs.getArray("doc_items_kv");
+        if (ia != null)
+            for (Object o : (Object[]) ia.getArray()) {
+                String kv = (String) o;
+                int sep = kv.indexOf('\u001f');
+                String[] qv = kv.substring(sep + 1).split("\\|", -1);
+                items.add(new DocItem(kv.substring(0, sep),
+                        qv[0].isEmpty() ? null : new java.math.BigDecimal(qv[0]),
+                        qv.length < 2 || qv[1].isEmpty() ? null : new java.math.BigDecimal(qv[1])));
+            }
+        items.sort(java.util.Comparator.comparing(DocItem::key));
+        p.docItems = List.copyOf(items);
         return p;
+    }
+
+    @Override
+    public List<ProcessInstance> openProcesses(String docType, String key, String backend) {
+        return db.with(c -> {
+            List<ProcessInstance> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT " + P_COLS + """
+                     FROM ewf_core.process_instance
+                    WHERE doc_type = ? AND document_key = ? AND backend_code IS NOT DISTINCT FROM ?
+                      AND status IN ('RUNNING','SUSPENDED','COMPLETING','ERROR') ORDER BY id""")) {
+                ps.setString(1, docType);
+                ps.setString(2, key);
+                ps.setString(3, backend);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) out.add(process(rs));
+                }
+            }
+            return out;
+        });
     }
 
     @Override

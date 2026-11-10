@@ -631,7 +631,7 @@ abstract class WorkflowEngineContract {
         assertEquals(ODA, oda.processTypeCode);
         assertEquals("4500000700", oda.documentKey);
         assertEquals(ProcessStatus.RUNNING, oda.status);
-        assertEquals(ROSSI, oda.startedBy);
+        assertEquals(Long.valueOf(ROSSI), oda.startedBy);
         assertTrue(f.released.isEmpty(), "nessuna azione di fine sull'avvio");
         assertTrue(f.b.auditTypes(avvio.id).containsAll(List.of("PROCESS_FORWARDED", "PROCESS_SPAWNED")));
     }
@@ -643,7 +643,7 @@ abstract class WorkflowEngineContract {
         f.choose(moved, BIANCHI, "URG");
         ProcessInstance urg = f.childOf(avvio.id, ProcessLink.HANDOFF);
         assertEquals(ODA_URG, urg.processTypeCode);
-        assertEquals(ROSSI, urg.startedBy, "richiedente = chi ha avviato il processo di avvio");
+        assertEquals(Long.valueOf(ROSSI), urg.startedBy, "richiedente = chi ha avviato il processo di avvio");
         assertEquals(Long.valueOf(NERI), f.openTask(urg.id).assigneeId);
     }
 
@@ -705,5 +705,185 @@ abstract class WorkflowEngineContract {
         assertTrue(f.engine.optionPreview(node.id, "RIV").isEmpty());
         assertTrue(f.store.links(avvio.id).isEmpty(), "nessun processo avviato dall'anteprima");
         assertEquals(ProcessStatus.RUNNING, f.status(avvio.id));
+    }
+
+    // ------------------------------------------------------------------
+    // Coda degli avvii: eventi del documento
+    // ------------------------------------------------------------------
+
+    private Requests.EventResult event(String key, Requests.DocumentEventType type, String sapUser) {
+        return f.engine.onDocumentEvent(new Requests.DocumentEvent("Q-" + key + "-" + type, "F", key, null, type, sapUser));
+    }
+
+    /** Regole: in generale l'OdA va all'approvazione standard; gli ordini ZCL passano dal processo di "Avvio". */
+    private void startRules() {
+        f.defineStartProcesses();
+        f.b.addStartRule(new StartRule(0, "F", Map.of(), 0, ODA));
+        f.b.addStartRule(new StartRule(0, "F", Map.of("sap.BSART", "ZCL"), 0, AVVIO));
+    }
+
+    private ProcessInstance theOpen(String key) {
+        List<ProcessInstance> open = f.store.openProcesses("F", key, null);
+        assertEquals(1, open.size(), "processi aperti su " + key);
+        return open.get(0);
+    }
+
+    @Test
+    void creatoAvviaIlProcessoDellaRegolaPiuSpecifica() {
+        startRules();
+        f.purchaseOrders.value("4500000800", Money.of("1000", "EUR")).context("4500000800", Map.of("sap.BSART", "ZCL"));
+        f.purchaseOrders.value("4500000801", Money.of("1000", "EUR")).context("4500000801", Map.of("sap.BSART", "NB"));
+        Requests.EventResult a = event("4500000800", Requests.DocumentEventType.CREATED, "MROSSI");
+        Requests.EventResult b = event("4500000801", Requests.DocumentEventType.CREATED, "MROSSI");
+        assertEquals(Requests.EventResult.EventStatus.DONE, a.status(), a.message());
+        assertEquals(AVVIO, theOpen("4500000800").processTypeCode, "ZCL: regola con condizione");
+        assertEquals(ODA, theOpen("4500000801").processTypeCode, "altri: regola generica");
+        assertEquals(Long.valueOf(ROSSI), theOpen("4500000801").startedBy, "richiedente = utente SAP mappato");
+        assertEquals(theOpen("4500000801").id, b.processId());
+    }
+
+    @Test
+    void utenteSapNonMappatoIlProcessoParteETaskDelRichiedenteAlTeamDiRiserva() {
+        startRules();
+        f.purchaseOrders.value("4500000802", Money.of("1000", "EUR"));
+        Requests.EventResult r = event("4500000802", Requests.DocumentEventType.CREATED, "SCONOSCIUTO");
+        assertEquals(Requests.EventResult.EventStatus.WARNING, r.status());
+        assertTrue(r.message().contains("SCONOSCIUTO"), r.message());
+        ProcessInstance p = theOpen("4500000802");
+        assertNull(p.startedBy);
+        TaskInstance t10 = f.openTask(p.id);
+        assertNull(t10.assigneeId);
+        assertEquals("WFADM", t10.teamCode, "il task del richiedente va al team di riserva");
+    }
+
+    @Test
+    void creatoConProcessoGiaApertoNonNeAvviaUnAltro() {
+        startRules();
+        ProcessInstance p = f.startOda("4500000803", "1000");
+        Requests.EventResult r = event("4500000803", Requests.DocumentEventType.CREATED, "MROSSI");
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status());
+        assertEquals(p.id, theOpen("4500000803").id, "idempotente: righe ripetute in coda non duplicano");
+    }
+
+    @Test
+    void senzaRegolaApplicabileNessunProcesso() {
+        f.purchaseOrders.value("4500000804", Money.of("1000", "EUR"));
+        Requests.EventResult r = event("4500000804", Requests.DocumentEventType.CREATED, "MROSSI");
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status());
+        assertTrue(f.store.openProcesses("F", "4500000804", null).isEmpty());
+    }
+
+    @Test
+    void rilascioAzzeratoRiavviaIlProcessoAperto() {
+        startRules();
+        ProcessInstance p = f.startOda("4500000805", "1000");
+        f.ok(f.openTask(p.id).id, ROSSI);
+        f.purchaseOrders.value("4500000805", Money.of("20000", "EUR"));
+        Requests.EventResult r = event("4500000805", Requests.DocumentEventType.RESET, "MROSSI");
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status(), r.message());
+        assertEquals(ProcessStatus.CANCELLED, f.status(p.id));
+        ProcessInstance n = theOpen("4500000805");
+        assertEquals(0, new java.math.BigDecimal("20000").compareTo(n.value.amount()), "il nuovo processo rilegge il documento");
+        assertEquals(Long.valueOf(ROSSI), n.startedBy, "stesso richiedente del processo riavviato");
+        assertEquals(10, f.openTask(n.id).stepNo, "le approvazioni ripartono");
+        assertTrue(f.b.auditTypes(p.id).contains("PROCESS_RESTARTED"));
+    }
+
+    @Test
+    void rilascioAzzeratoSenzaProcessoApertoLoAvvia() {
+        startRules();
+        f.purchaseOrders.value("4500000806", Money.of("1000", "EUR"));
+        event("4500000806", Requests.DocumentEventType.RESET, "MROSSI");
+        assertEquals(ODA, theOpen("4500000806").processTypeCode);
+    }
+
+    @Test
+    void modificaSenzaVariazioniIgnorataConVariazioniRiavvia() {
+        startRules();
+        DocItem p10 = new DocItem("00010", new java.math.BigDecimal("10"), new java.math.BigDecimal("700"));
+        DocItem p20 = new DocItem("00020", new java.math.BigDecimal("5"), new java.math.BigDecimal("300"));
+        f.purchaseOrders.items("4500000807", List.of(p10, p20));
+        ProcessInstance p = f.startOda("4500000807", "1000");
+        assertEquals(List.of(p10, p20), f.store.process(p.id).orElseThrow().docItems, "posizioni fotografate all'avvio");
+
+        Requests.EventResult same = event("4500000807", Requests.DocumentEventType.CHANGED, "MROSSI");
+        assertEquals(Requests.EventResult.EventStatus.DONE, same.status());
+        assertEquals(p.id, theOpen("4500000807").id, "testo cambiato, posizioni no: si prosegue");
+        assertTrue(f.b.auditTypes(p.id).contains("DOCUMENT_CHANGE_IGNORED"));
+
+        // +2 sulla 10, -2 sulla 20: totale invariato, ma e' una modifica
+        f.purchaseOrders.items("4500000807", List.of(
+                new DocItem("00010", new java.math.BigDecimal("12"), new java.math.BigDecimal("700")),
+                new DocItem("00020", new java.math.BigDecimal("3"), new java.math.BigDecimal("300"))));
+        Requests.EventResult qty = event("4500000807", Requests.DocumentEventType.CHANGED, "MROSSI");
+        assertTrue(qty.message().contains("posizione 00010"), qty.message());
+        assertEquals(ProcessStatus.CANCELLED, f.status(p.id), "tolleranza 0: qualsiasi variazione riavvia");
+        assertTrue(p.id != theOpen("4500000807").id, "nuovo processo");
+    }
+
+    @Test
+    void cancellazioneAnnullaIProcessiAperti() {
+        ProcessInstance p = f.startOda("4500000808", "1000");
+        event("4500000808", Requests.DocumentEventType.DELETED, "MROSSI");
+        assertEquals(ProcessStatus.CANCELLED, f.status(p.id));
+        assertEquals(WorkflowEngine.REASON_DOCUMENT_DELETED, f.store.process(p.id).orElseThrow().statusReason);
+    }
+
+    @Test
+    void sistemaIrraggiungibileErroreDaRitentareENessunProcesso() {
+        startRules();
+        f.purchaseOrders.value("4500000809", Money.of("1000", "EUR"));
+        f.purchaseOrders.offline(true);
+        Requests.EventResult r = event("4500000809", Requests.DocumentEventType.CREATED, "MROSSI");
+        f.purchaseOrders.offline(false);
+        assertEquals(Requests.EventResult.EventStatus.ERROR, r.status());
+        assertTrue(r.message().contains("BACKEND_UNAVAILABLE"), r.message());
+        assertTrue(f.store.openProcesses("F", "4500000809", null).isEmpty());
+        assertEquals(Requests.EventResult.EventStatus.DONE,
+                event("4500000809", Requests.DocumentEventType.CREATED, "MROSSI").status(), "ritentato: va");
+    }
+
+    @Test
+    void ilProcessoreLeggeElaboraEConferma() {
+        startRules();
+        f.purchaseOrders.value("4500000810", Money.of("1000", "EUR"));
+        List<Requests.EventResult> confirmed = new java.util.ArrayList<>();
+        it.eone.ewf.engine.spi.StartSource src = new it.eone.ewf.engine.spi.StartSource() {
+            boolean given;
+            @Override public List<Requests.DocumentEvent> fetch(int max) {
+                if (given) return List.of();
+                given = true;
+                return List.of(new Requests.DocumentEvent("Q1", "F", "4500000810", null,
+                        Requests.DocumentEventType.CREATED, "MROSSI"));
+            }
+            @Override public void confirm(List<Requests.EventResult> results) { confirmed.addAll(results); }
+        };
+        StartQueueProcessor proc = new StartQueueProcessor(f.engine, src, 50);
+        assertEquals(1, proc.runOnce().size());
+        assertEquals(List.of("Q1"), confirmed.stream().map(Requests.EventResult::queueId).toList());
+        assertTrue(proc.runOnce().isEmpty(), "coda vuota");
+        assertEquals(ODA, theOpen("4500000810").processTypeCode);
+    }
+
+    @Test
+    void eventoFallitoTrattieneIdSuccessiviDelloStessoDocumento() {
+        startRules();
+        f.purchaseOrders.missing("4500000811");                     // CREATED fallira'
+        f.purchaseOrders.value("4500000812", Money.of("1000", "EUR"));
+        List<Requests.EventResult> confirmed = new java.util.ArrayList<>();
+        it.eone.ewf.engine.spi.StartSource src = new it.eone.ewf.engine.spi.StartSource() {
+            @Override public List<Requests.DocumentEvent> fetch(int max) {
+                return List.of(
+                        new Requests.DocumentEvent("Q1", "F", "4500000811", null, Requests.DocumentEventType.CREATED, "MROSSI"),
+                        new Requests.DocumentEvent("Q2", "F", "4500000812", null, Requests.DocumentEventType.CREATED, "MROSSI"),
+                        new Requests.DocumentEvent("Q3", "F", "4500000811", null, Requests.DocumentEventType.DELETED, "MROSSI"));
+            }
+            @Override public void confirm(List<Requests.EventResult> results) { confirmed.addAll(results); }
+        };
+        new StartQueueProcessor(f.engine, src, 50).runOnce();
+        assertEquals(List.of("Q1", "Q2"), confirmed.stream().map(Requests.EventResult::queueId).toList(),
+                "Q3 resta in coda dietro a Q1");
+        assertEquals(Requests.EventResult.EventStatus.ERROR, confirmed.get(0).status());
+        assertEquals(Requests.EventResult.EventStatus.DONE, confirmed.get(1).status(), "gli altri documenti vanno avanti");
     }
 }

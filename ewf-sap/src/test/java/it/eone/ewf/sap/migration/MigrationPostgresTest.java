@@ -119,4 +119,22 @@ class MigrationPostgresTest {
         assertEquals(ProcessStatus.COMPLETED, store.process(p.id).orElseThrow().status);
         assertEquals("01", releaseParams.get(0).get("Z_WF_SET_RIL"), "codice di rilascio migrato");
     }
+
+    @Test
+    void leRegoleDiAvvioSopravvivonoAUnaNuovaMigrazione() throws Exception {
+        db.run(() -> db.with(c -> { c.createStatement().execute("DELETE FROM ewf_core.start_rule"); return null; }));
+        MigrationPlan plan = new LegacyMapper(LegacyMapper.Options.defaults()).map(LegacyMapperTest.realConfig());
+        new MigrationWriter(db).write(plan, false);
+        new it.eone.ewf.engine.jdbc.JdbcDefinitionWriter(db).addStartRule(
+                new it.eone.ewf.engine.model.StartRule(0, "F", java.util.Map.of(), 0, "EONE_ODA"));
+        // un processo creato a mano, che la migrazione non ricrea: la sua regola va scartata
+        new it.eone.ewf.engine.jdbc.JdbcDefinitionWriter(db).saveType(
+                new it.eone.ewf.engine.model.ProcessType("SCOMPARSO_DOPO", "Manuale", "F", false, false, false));
+        new it.eone.ewf.engine.jdbc.JdbcDefinitionWriter(db).addStartRule(
+                new it.eone.ewf.engine.model.StartRule(0, "F", java.util.Map.of("sap.BSART", "ZX"), 5, "SCOMPARSO_DOPO"));
+        MigrationWriter.Result r = new MigrationWriter(db).write(plan, false);
+        assertEquals(1, r.written().get("Regole di avvio conservate"));
+        assertEquals(1, r.written().get("Regole di avvio scartate (processo non piu' presente)"));
+        assertEquals(1, new it.eone.ewf.engine.jdbc.JdbcDefinitionStore(db).startRules("F").size());
+    }
 }

@@ -17,6 +17,7 @@ public final class MapDocumentAdapters implements DocumentAdapterRegistry {
     public static final class Fixed implements DocumentAdapter {
         private final Map<String, Money> values = new HashMap<>();
         private final Map<String, Map<String, String>> contexts = new HashMap<>();
+        private final Map<String, java.util.List<it.eone.ewf.engine.model.DocItem>> items = new HashMap<>();
         private final Set<String> missing = new HashSet<>();
         private boolean offline;
         private int reads;
@@ -24,6 +25,10 @@ public final class MapDocumentAdapters implements DocumentAdapterRegistry {
         public Fixed value(String key, Money v) { values.put(key, v); return this; }
         public Fixed context(String key, Map<String, String> c) { contexts.put(key, Map.copyOf(c)); return this; }
         public Fixed missing(String key) { missing.add(key); return this; }
+        public Fixed items(String key, java.util.List<it.eone.ewf.engine.model.DocItem> l) {
+            items.put(key, java.util.List.copyOf(l));
+            return this;
+        }
         public Fixed offline(boolean b) { offline = b; return this; }
         public int reads() { return reads; }
 
@@ -32,7 +37,8 @@ public final class MapDocumentAdapters implements DocumentAdapterRegistry {
             reads++;
             if (offline) throw new UnavailableException("sistema non raggiungibile (simulato)", null);
             if (missing.contains(key)) return DocumentInfo.notFound("cancellato");
-            return DocumentInfo.found(values.get(key), contexts.getOrDefault(key, Map.of()));
+            return DocumentInfo.found(values.get(key), contexts.getOrDefault(key, Map.of()),
+                    items.getOrDefault(key, java.util.List.of()));
         }
     }
 

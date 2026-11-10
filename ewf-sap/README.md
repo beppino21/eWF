@@ -117,6 +117,11 @@ Motore vero (DB `ewf` + dispatcher SAP), nessuna UI. Argomenti del programma:
 | `ko <taskId> <login> <nota>` | respingi |
 | `sposta <taskId> <login> <login dest>` | sposta |
 | `riprova <processId> <login>` | ritenta l'azione di fine processo (processo in `ERROR`) |
+| `coda` | un giro della coda degli avvii `/EWF/START_Q` |
+| `servizio` | scheduler eone-connect: la coda degli avvii ogni 30 secondi, finché non lo si ferma |
+| `lavori [codice]` | job pianificati, prossima esecuzione e ultime esecuzioni |
+| `regola <tipodoc> <processo> [priorità] [chiave=valore …]` | nuova regola di avvio (es. `regola F EONE_ODA`) |
+| `regole <tipodoc>` | elenca le regole di avvio |
 
 Variabili: `EWF_DB_URL` (default `jdbc:postgresql://localhost:5432/ewf`), `EWF_DB_USER` (default `ewf_app`),
 `EWF_DB_PASSWORD`, `EWF_SAP_DEST` (default `EWF_DEV`) e quelle della destinazione SAP.
@@ -128,3 +133,35 @@ all'avvio di ogni processo: esistenza, valore (divisa standard del mandante, via
 attributi in `ET_CONTEXT` (`WERKS`, `BUKRS`, `EKGRP`, `EKORG`, `LGORT`, `LIFNR`, `BSART`).
 Per le regole valgono gli stessi attributi del vecchio `WF_USER_TASK`: OdA → divisione e societa';
 RdA → anche gruppo acquisti e magazzino. Gli altri restano nel contesto con prefisso `sap.`.
+
+## Coda degli avvii: `/EWF/START_Q`
+
+Oggetti in `abap/`: `EWF_START_Q_DDIC.md` (tabella e struttura), `EWF_START_Q_WRITE.abap` (modulo di
+aggiornamento per le exit), `EWF_START_Q_READ.abap` e `EWF_START_Q_CONFIRM.abap` (RFC, usate da
+`SapStartQueue`), `ZCL_EWF_PO_START_EXAMPLE.abap` (esempio di BAdI `ME_PROCESS_PO_CUST~POST`).
+Le exit chiamano `/EWF/START_Q_WRITE IN UPDATE TASK` al posto di `/EWF/WF_START`.
+Una nuova migrazione (`--apply`) conserva le regole di avvio dei processi che esistono ancora.
+
+## Avvio automatico: job `ewf.start-queue` (eone-connect)
+
+La coda degli avvii viene letta dallo scheduler di eone-connect: job `EWF_START_QUEUE`, ogni 30 secondi.
+Con più Tomcat accesi gira su uno solo.
+
+1. `mvn install` di `eone-connect`, poi di `ewf-engine`, poi build di `ewf-sap`.
+2. Schema `eone_connect` nel DB `ewf`, con l'utente proprietario (`CONNECT_DB_PASSWORD` nell'ambiente):
+   `it.eone.connect.db.ConnectSchemaTool jdbc:postgresql://localhost:5432/ewf ewf_owner ewf_app`
+3. `OdaProbe servizio`: al primo avvio crea il job. Pianificazione e parametri si cambiano in `eone_connect.job` senza riavvio:
+   - `batch` — eventi per giro (50)
+   - `maxRounds` — giri consecutivi se la coda è piena (10)
+   - `attempts` — tentativi SAP (20)
+
+Esiti nello storico:
+
+| Esito | Quando |
+|---|---|
+| (nessuna riga) | coda vuota; aggiorna solo `last_idle_at` |
+| `OK` | tutto avviato |
+| `WARNING` | almeno un avviso, es. task al team di riserva |
+| `ERROR` | almeno un evento fallito; gli eventi successivi dello stesso documento restano in coda |
+
+`OdaProbe lavori` mostra lo stato.

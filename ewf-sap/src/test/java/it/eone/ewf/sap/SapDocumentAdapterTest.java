@@ -20,6 +20,7 @@ class SapDocumentAdapterTest {
         assertNull(ctx.get("purchasing_group"), "WF_USER_TASK non valorizza EKGRP per gli OdA");
         assertNull(ctx.get("storage_location"));
         assertEquals("Z01", ctx.get("sap.EKGRP"), "resta disponibile per audit e UI");
+        assertNull(ctx.get("quantity"), "niente totali: le modifiche si confrontano per posizione");
     }
 
     @Test

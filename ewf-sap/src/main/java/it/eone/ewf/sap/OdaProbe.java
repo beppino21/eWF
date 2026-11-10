@@ -13,6 +13,12 @@ import it.eone.ewf.engine.model.User;
 import it.eone.ewf.engine.spi.UserDirectory;
 import it.eone.ewf.engine.jdbc.JdbcTransactions;
 import it.eone.ewf.engine.jdbc.JdbcUserDirectory;
+import it.eone.ewf.engine.jdbc.JdbcDefinitionStore;
+import it.eone.ewf.engine.jdbc.JdbcDefinitionWriter;
+import it.eone.ewf.engine.StartQueueProcessor;
+import it.eone.ewf.engine.model.StartRule;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -32,6 +38,11 @@ import java.util.Arrays;
  *   ko     &lt;taskId&gt; &lt;login&gt; &lt;nota&gt;          respingi
  *   sposta &lt;taskId&gt; &lt;login&gt; &lt;login dest&gt;   sposta il task
  *   riprova &lt;processId&gt; &lt;login&gt;            ritenta l'azione di fine processo (processo in ERROR)
+ *   coda                                  un giro della coda degli avvii /EWF/START_Q
+ *   regola &lt;tipodoc&gt; &lt;processo&gt; [priorita'] [chiave=valore ...]   nuova regola di avvio
+ *   regole &lt;tipodoc&gt;                      elenca le regole di avvio
+ *   servizio                              scheduler eone-connect: coda degli avvii ogni 30s, fino a Ctrl+C
+ *   lavori [codice]                       job pianificati e ultime esecuzioni
  *
  * Variabili d'ambiente:
  *   EWF_DB_URL (default jdbc:postgresql://localhost:5432/ewf), EWF_DB_USER (default ewf_app), EWF_DB_PASSWORD
@@ -44,20 +55,23 @@ public final class OdaProbe {
     private final DataSource ds;
     private final WorkflowEngine engine;
     private final UserDirectory users;
+    private final String dest;
+    private final JdbcDefinitionStore engineDefs;
 
     private OdaProbe() {
         String url = env("EWF_DB_URL", "jdbc:postgresql://localhost:5432/ewf");
         ds = new SimpleDataSource(url, env("EWF_DB_USER", "ewf_app"), env("EWF_DB_PASSWORD", null));
         SapDestinations.register();
-        String dest = env("EWF_SAP_DEST", "EWF_DEV");
+        dest = env("EWF_SAP_DEST", "EWF_DEV");
         engine = JdbcEngineFactory.create(ds, new SapHandlerRegistry(dest), SapDocumentAdapter.registry(dest),
                 new RateCurrencyConverter(), Clock.systemDefaultZone(), EngineConfig.defaults());
         users = new JdbcUserDirectory(new JdbcTransactions(ds));
+        engineDefs = new JdbcDefinitionStore(new JdbcTransactions(ds));
         System.out.println("DB " + url + " · SAP " + dest);
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 2) {
+        if (args.length < 1 || (args.length < 2 && !java.util.Set.of("coda", "servizio", "lavori").contains(args[0].toLowerCase()))) {
             System.out.println("""
                     Uso:
                       avvia   <ebeln> <login>
@@ -65,7 +79,12 @@ public final class OdaProbe {
                       ok      <taskId> <login> [nota]
                       ko      <taskId> <login> <nota>
                       sposta  <taskId> <login> <login destinatario>
-                      riprova <processId> <login>""");
+                      riprova <processId> <login>
+                      coda
+                      regola  <tipodoc> <processo> [priorita'] [chiave=valore ...]
+                      regole  <tipodoc>
+                      servizio
+                      lavori  [codice]""");
             return;
         }
         OdaProbe p = new OdaProbe();
@@ -102,6 +121,32 @@ public final class OdaProbe {
                     System.out.println("Processo " + pi.id + ": " + pi.status);
                     p.statusOfProcess(pi.id);
                 }
+                case "coda" -> {
+                    var results = new StartQueueProcessor(p.engine, new SapStartQueue(p.dest, 20), 50).runOnce();
+                    if (results.isEmpty()) System.out.println("Coda vuota");
+                    results.forEach(r -> System.out.printf("  %s  %-7s %s%s%n", r.queueId(), r.status(), r.message(),
+                            r.processId() == null ? "" : "  [processo " + r.processId() + "]"));
+                }
+                case "regola" -> {
+                    need(args, 3);
+                    int prio = 0;
+                    Map<String, String> cond = new LinkedHashMap<>();
+                    for (int i = 3; i < args.length; i++) {
+                        if (args[i].contains("=")) {
+                            String[] kv = args[i].split("=", 2);
+                            cond.put(kv[0], kv[1]);
+                        } else prio = Integer.parseInt(args[i]);
+                    }
+                    long id = new JdbcDefinitionWriter(new JdbcTransactions(p.ds))
+                            .addStartRule(new StartRule(0, args[1], cond, prio, args[2]));
+                    System.out.println("Regola di avvio " + id + ": " + args[1] + " " + cond + " -> " + args[2]
+                            + " (priorita' " + prio + ")");
+                }
+                case "regole" -> p.engineDefs.startRules(args[1]).forEach(r -> System.out.printf(
+                        "  %-4d %-4s %-40s prio %-3d -> %s%n", r.id(), r.docType(), r.conditions(), r.priority(),
+                        r.processType()));
+                case "servizio" -> p.service();
+                case "lavori" -> p.jobs(args.length > 1 ? args[1] : null);
                 default -> System.out.println("Comando sconosciuto: " + args[0]);
             }
         } catch (EngineException e) {
@@ -200,6 +245,38 @@ public final class OdaProbe {
             System.out.println("  prossimi step previsti:");
             preview.forEach(e -> System.out.printf("    %-5d %-40s %s%n", e.stepNo(), e.taskText(),
                     e.assignee() == null ? nz(e.note()) : e.assignee()));
+        }
+    }
+
+    /** Scheduler di eone-connect sullo stesso DB di eWF (schema eone_connect). Piu' istanze insieme: gira una sola. */
+    private it.eone.connect.scheduler.Scheduler scheduler() {
+        var registry = new it.eone.connect.scheduler.JobRegistry()
+                .register(StartQueueJob.KEY, () -> new StartQueueJob(engine, dest));
+        return new it.eone.connect.scheduler.Scheduler(new it.eone.connect.db.Db(ds), registry,
+                it.eone.connect.scheduler.Scheduler.Options.defaults());
+    }
+
+    private void service() throws InterruptedException {
+        var s = scheduler();
+        s.start();   // verifica lo schema eone_connect: se manca dice come installarlo
+        s.store().ensure(StartQueueJob.CODE, StartQueueJob.KEY, "Coda degli avvii /EWF/START_Q (" + dest + ")",
+                "every 30s", "Europe/Rome", true, Map.of("batch", "50"));
+        Runtime.getRuntime().addShutdownHook(new Thread(s::stop));
+        System.out.println("Scheduler attivo sul nodo " + s.node() + ". Ctrl+C (o Stop in Eclipse) per fermarlo.");
+        Thread.currentThread().join();
+    }
+
+    private void jobs(String code) {
+        var store = new it.eone.connect.scheduler.JobStore(new it.eone.connect.db.Db(ds));
+        var fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm:ss").withZone(java.time.ZoneId.systemDefault());
+        java.util.function.Function<java.time.Instant, String> t = i -> i == null ? "-" : fmt.format(i);
+        for (var d : store.definitions()) {
+            if (code != null && !d.code().equalsIgnoreCase(code)) continue;
+            System.out.printf("%s  %-8s %-22s prossimo %s  ultimo a vuoto %s  %s%n", d.code(), d.enabled() ? "attivo" : "SPENTO",
+                    d.schedule(), t.apply(d.nextRunAt()), t.apply(d.lastIdleAt()), d.params());
+            for (var r : store.runs(d.code(), code == null ? 3 : 20))
+                System.out.printf("    %s  %-7s %-14s %s %s%n", t.apply(r.startedAt()), r.status(), r.node(),
+                        r.counts().isEmpty() ? "" : r.counts(), nz(r.message()));
         }
     }
 

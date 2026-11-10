@@ -26,6 +26,7 @@ interface Backend {
     void addRule(AssignmentRule rule);
     void removeRules(String roleCode);
     void defineType(ProcessType type);
+    void addStartRule(it.eone.ewf.engine.model.StartRule rule);
 
     /** Registra e attiva la versione; restituisce l'id con cui il motore la conosce. */
     long activate(ProcessVersion version);

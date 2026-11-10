@@ -25,16 +25,47 @@ public final class JdbcDefinitionStore implements DefinitionStore {
     public Optional<ProcessType> processType(String code) {
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT code, description, doc_type, suspended, auto_ok_first, no_first_step
+                    SELECT code, description, doc_type, suspended, auto_ok_first, no_first_step, change_tolerance_pct
                       FROM ewf_core.process_type WHERE code = ?""")) {
                 ps.setString(1, code);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) return Optional.empty();
                     return Optional.of(new ProcessType(rs.getString("code"), rs.getString("description"),
                             rs.getString("doc_type"), rs.getBoolean("suspended"),
-                            rs.getBoolean("auto_ok_first"), rs.getBoolean("no_first_step")));
+                            rs.getBoolean("auto_ok_first"), rs.getBoolean("no_first_step"),
+                            rs.getBigDecimal("change_tolerance_pct")));
                 }
             }
+        });
+    }
+
+    @Override
+    public List<StartRule> startRules(String docType) {
+        return db.with(c -> {
+            Map<Long, Map<String, String>> cond = new HashMap<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT r.id, e.key, e.value FROM ewf_core.start_rule r
+                     CROSS JOIN LATERAL jsonb_each_text(r.conditions) e
+                     WHERE r.doc_type = ? AND r.active""")) {
+                ps.setString(1, docType);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next())
+                        cond.computeIfAbsent(rs.getLong(1), k -> new LinkedHashMap<>()).put(rs.getString(2), rs.getString(3));
+                }
+            }
+            List<StartRule> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT id, doc_type, priority, process_type_code FROM ewf_core.start_rule
+                     WHERE doc_type = ? AND active ORDER BY id""")) {
+                ps.setString(1, docType);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next())
+                        out.add(new StartRule(rs.getLong("id"), rs.getString("doc_type"),
+                                cond.getOrDefault(rs.getLong("id"), Map.of()), rs.getInt("priority"),
+                                rs.getString("process_type_code")));
+                }
+            }
+            return out;
         });
     }
 

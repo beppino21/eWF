@@ -70,6 +70,28 @@ dice se il documento esiste, quanto vale e i suoi attributi (divisione, societa'
   che rilegge il documento *prima* di annullare il processo in corso.
 - Senza adapter per il tipo documento il processo parte senza verifica (audit `documentCheck=NO_ADAPTER`).
 
+## Avvio automatico: la coda degli avvii
+
+Il sistema di origine scrive in una **coda** cosa è successo a un documento; eWF la legge
+(`StartSource`), elabora ogni evento (`WorkflowEngine.onDocumentEvent`) e conferma l'esito.
+On-premise la coda è `/EWF/START_Q`, scritta dalle exit di salvataggio **nella LUW del documento**;
+sulla Public Edition la scrive l'handler locale degli eventi di business. `StartQueueProcessor.runOnce()`
+fa un giro; la frequenza la decide l'applicazione.
+
+| Evento | Chi lo scrive | Cosa fa eWF |
+|---|---|---|
+| `CREATED` | documento nuovo | regole di avvio → avvia il processo (niente se già aperto o se nessuna regola si applica) |
+| `RESET` | la strategia di rilascio ha azzerato il rilascio | riavvia i processi aperti (o avvia, se non ce ne sono) |
+| `CHANGED` | modifica senza strategia di rilascio | rilegge il documento e lo confronta **posizione per posizione** con l'avvio: la prima posizione aggiunta, eliminata o con quantità/valore oltre `change_tolerance_pct` → riavvio; altrimenti nulla. Mai sui totali: variazioni opposte su posizioni diverse si annullerebbero |
+| `DELETED` | cancellazione | annulla i processi aperti (`DOCUMENT_DELETED`) |
+
+- **Regole di avvio** (`start_rule`): tipo documento + condizioni sugli attributi di `DOC_INFO`
+  (`*` = qualsiasi) → tipo processo. Vince la priorità più alta, poi la regola più specifica.
+- **Richiedente**: l'utente SAP che ha salvato, tradotto con `sap_user`. Se non ha un corrispondente
+  attivo il processo parte comunque, i task del richiedente vanno al team di riserva, l'esito è `WARNING`.
+- Un evento in errore (es. SAP irraggiungibile) resta in coda e si ritenta; gli eventi successivi dello
+  **stesso documento** aspettano dietro di lui, gli altri documenti proseguono.
+
 ## Nodi di scelta e rami
 
 Azioni sul task: **Approva**, **Respingi**, **Sposta**. Un task con opzioni è un **nodo di scelta**:
@@ -150,8 +172,8 @@ paralleli chiusi insieme). Senza configurazione i test PostgreSQL vengono **salt
 Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`: mai usare `ewf`):
 
 1. in psql come `postgres`: `CREATE DATABASE ewf_test OWNER ewf_owner ENCODING 'UTF8' TEMPLATE template0;`
-2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.10.sql'`
-   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.9_to_0.10.sql`)
+2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.12.sql'`
+   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.11_to_0.12.sql`)
 3. variabili d'ambiente (in Eclipse: *Run Configurations → scheda Environment*):
    `EWF_TEST_DB_URL=jdbc:postgresql://localhost:5432/ewf_test`,
    `EWF_TEST_DB_USER=ewf_owner`, `EWF_TEST_DB_PASSWORD=...`
@@ -159,8 +181,8 @@ Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`
 ## Database
 
 Cartella `db/`:
-- `ewf_schema_v0.10.sql` – schema completo per un DB nuovo;
-- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.10), da applicare in ordine.
+- `ewf_schema_v0.12.sql` – schema completo per un DB nuovo;
+- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.12), da applicare in ordine.
 
 ## Limiti noti
 

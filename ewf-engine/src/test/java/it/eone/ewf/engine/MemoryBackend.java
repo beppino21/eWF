@@ -34,6 +34,7 @@ final class MemoryBackend implements Backend {
     @Override public void addRule(AssignmentRule r) { rules.add(r); }
     @Override public void removeRules(String role) { rules.removeIf(r -> r.roleCode().equals(role)); }
     @Override public void defineType(ProcessType t) { defs.type(t); }
+    @Override public void addStartRule(it.eone.ewf.engine.model.StartRule r) { defs.startRule(r); }
     @Override public long activate(ProcessVersion v) { defs.activate(v); return v.id(); }
     @Override public List<String> auditTypes(long processId) { return audit.types(processId); }
 }

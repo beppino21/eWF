@@ -2,12 +2,15 @@ package it.eone.ewf.sap;
 
 import com.sap.conn.jco.*;
 import it.eone.ewf.engine.assign.RuleBasedAssignmentResolver;
+import it.eone.ewf.engine.model.DocItem;
 import it.eone.ewf.engine.model.Money;
 import it.eone.ewf.engine.spi.DocumentAdapter;
 import it.eone.ewf.engine.spi.DocumentAdapterRegistry;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -75,10 +78,17 @@ public final class SapDocumentAdapter implements DocumentAdapter {
             if (name != null && value != null) sap.put(name, value);
         }
 
+        List<DocItem> items = new ArrayList<>();
+        JCoTable it = f.getTableParameterList().getTable("ET_ITEMS");
+        for (int i = 0; i < it.getNumRows(); i++) {
+            it.setRow(i);
+            items.add(new DocItem(it.getString("ITEM").trim(), it.getBigDecimal("MENGE"), it.getBigDecimal("NETWR")));
+        }
+
         String waers = blankToNull(out.getString("E_WAERS"));
         BigDecimal netwr = out.getBigDecimal("E_NETWR");
         Money value = waers == null || netwr == null ? null : new Money(netwr, waers);
-        return new DocumentInfo(true, value, ruleContext(docType, sap), message);
+        return new DocumentInfo(true, value, ruleContext(docType, sap), message, items);
     }
 
     /** Traduce i campi SAP nelle chiavi del risolutore regole, secondo quello che leggeva WF_USER_TASK. */

@@ -28,17 +28,19 @@ public final class JdbcDefinitionWriter {
             ensure(c, "INSERT INTO ewf_core.doc_type(code, description) VALUES (?, ?) ON CONFLICT DO NOTHING",
                     t.docType(), t.docType());
             try (PreparedStatement ps = c.prepareStatement("""
-                    INSERT INTO ewf_core.process_type(code, description, doc_type, suspended, auto_ok_first, no_first_step)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO ewf_core.process_type(code, description, doc_type, suspended, auto_ok_first, no_first_step,
+                                                      change_tolerance_pct)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT (code) DO UPDATE SET description = EXCLUDED.description, doc_type = EXCLUDED.doc_type,
                         suspended = EXCLUDED.suspended, auto_ok_first = EXCLUDED.auto_ok_first,
-                        no_first_step = EXCLUDED.no_first_step""")) {
+                        no_first_step = EXCLUDED.no_first_step, change_tolerance_pct = EXCLUDED.change_tolerance_pct""")) {
                 ps.setString(1, t.code());
                 ps.setString(2, t.description() == null ? t.code() : t.description());
                 ps.setString(3, t.docType());
                 ps.setBoolean(4, t.suspended());
                 ps.setBoolean(5, t.autoOkFirst());
                 ps.setBoolean(6, t.noFirstStep());
+                ps.setBigDecimal(7, t.changeTolerancePct());
                 ps.executeUpdate();
             }
             return null;
@@ -151,6 +153,21 @@ public final class JdbcDefinitionWriter {
 
             if (activate) activate(c, versionId, v.processTypeCode());
             return versionId;
+        }));
+    }
+
+    /** Nuova regola di avvio; restituisce l'id. */
+    public long addStartRule(StartRule r) {
+        return db.inTransaction(() -> db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO ewf_core.start_rule(doc_type, conditions, priority, process_type_code)
+                    VALUES (?, ?::jsonb, ?, ?) RETURNING id""")) {
+                ps.setString(1, r.docType());
+                ps.setString(2, Sql.json(r.conditions()));
+                ps.setInt(3, r.priority());
+                ps.setString(4, r.processType());
+                return single(ps);
+            }
         }));
     }
 
