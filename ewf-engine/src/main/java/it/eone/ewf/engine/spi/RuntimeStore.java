@@ -26,6 +26,18 @@ public interface RuntimeStore {
     /** Processi aperti (di qualsiasi tipo) sul documento, in ordine di avvio. */
     List<ProcessInstance> openProcesses(String docType, String documentKey, String backend);
 
+    /** Registra una notifica (nella transazione corrente: se questa va in rollback, la notifica non esiste). */
+    void addNotification(String kind, long processId, long taskId);
+
+    /** Notifiche da elaborare, in ordine. */
+    List<PendingNotification> pendingNotifications(int max);
+
+    /** Notifica elaborata, con l'esito (es. "mail 12 a rossi@...", "task non piu' aperto"). */
+    void notificationDone(long id, String result);
+
+    /** Tutti i processi (aperti e chiusi) sul documento, in ordine di avvio. */
+    List<ProcessInstance> processesOf(String docType, String documentKey, String backend);
+
     TaskInstance insertTask(TaskInstance t);
     void updateTask(TaskInstance t);
     Optional<TaskInstance> task(long id);

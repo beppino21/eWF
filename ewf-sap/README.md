@@ -120,6 +120,10 @@ Motore vero (DB `ewf` + dispatcher SAP), nessuna UI. Argomenti del programma:
 | `coda` | un giro della coda degli avvii `/EWF/START_Q` |
 | `servizio` | scheduler eone-connect: la coda degli avvii ogni 30 secondi, finché non lo si ferma |
 | `lavori [codice]` | job pianificati, prossima esecuzione e ultime esecuzioni |
+| `esegui <codice>` | fa partire un job al prossimo giro del servizio (es. `EWF_MAIL_DIGEST`) |
+| `avviso <processo> <step> IMMEDIATE\|NONE` | avviso immediato per i task di uno step (versione attiva) |
+| `posta` | ultime mail della coda di uscita, con stato ed errore |
+| `mailprova <indirizzo>` | invio diretto di prova: verifica la configurazione `EONE_SMTP_*` |
 | `regola <tipodoc> <processo> [priorità] [chiave=valore …]` | nuova regola di avvio (es. `regola F EONE_ODA`) |
 | `regole <tipodoc>` | elenca le regole di avvio |
 
@@ -165,3 +169,30 @@ Esiti nello storico:
 | `ERROR` | almeno un evento fallito; gli eventi successivi dello stesso documento restano in coda |
 
 `OdaProbe lavori` mostra lo stato.
+
+## Notifiche mail
+
+| Job | Pianificazione | Cosa fa |
+|---|---|---|
+| `EWF_NOTIFY` (`ewf.notify`) | ogni minuto | avviso immediato per i task con `notify = IMMEDIATE` |
+| `EWF_MAIL_DIGEST` (`ewf.mail-digest`) | 07:15 lun–ven | riepilogo per utente ogni `mail_every_days` giorni |
+| `EONE_MAIL_SEND` (`eone.mail-send`) | ogni minuto | spedisce la coda di uscita (solo se `EONE_SMTP_HOST` è impostata) |
+
+Destinatari:
+- task di una persona: lei, oppure il suo **sostituto** se oggi ne ha uno (`ewf_org.substitution`), come il legacy;
+- task di team: tutti i membri del team;
+- riepilogo: i task propri (o presi in carico), quelli di chi si sta sostituendo ("per …"), quelli di team ancora
+  da prendere in carico. Chi oggi è sostituito non riceve il suo riepilogo. Nessuna attività in attesa: nessuna mail.
+
+Testi: tabella `ewf_core.mail_template` (`TASK_ACTIVATED`, `DIGEST`), modificabili; segnaposto `{{nome}}`.
+Parametro `baseUrl` dei job: indirizzo dell'interfaccia eWF per il link (vuoto finché l'interfaccia non c'è).
+
+La mail legacy `/EWF/SEND_MAIL_NEW_TASK` non viene più migrata come aggancio; `GG_MAIL` diventa `mail_every_days`.
+
+Messa in servizio:
+1. schema eone_connect alla versione 2: di nuovo `ConnectSchemaTool ... ewf_owner ewf_app`;
+2. migrazione DB eWF `ewf_migrate_0.12_to_0.13.sql` come `ewf_owner`;
+3. `mail_every_days` per gli utenti (nuova migrazione dal legacy, oppure `UPDATE ewf_org.app_user`);
+4. avviso immediato dove serve: `avviso EONE_ODA 20 IMMEDIATE`;
+5. variabili `EONE_SMTP_*` (vedi README di eone-connect), prova con `mailprova <tuo indirizzo>`;
+6. `servizio`, poi `posta` e `lavori`.

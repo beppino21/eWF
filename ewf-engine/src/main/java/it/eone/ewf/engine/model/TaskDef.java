@@ -18,7 +18,8 @@ public record TaskDef(
         Interaction interaction,
         String taskParam,
         List<HookDef> hooks,
-        List<OptionDef> options) {
+        List<OptionDef> options,
+        NotifyMode notifyMode) {
 
     public TaskDef {
         hooks = hooks == null ? List.of() : List.copyOf(hooks);
@@ -26,6 +27,15 @@ public record TaskDef(
         if (assigneeMode == null) assigneeMode = AssigneeMode.RULES;
         if (previewMode == null) previewMode = PreviewMode.NAME;
         if (interaction == null) interaction = Interaction.WEB;
+        if (notifyMode == null) notifyMode = NotifyMode.NONE;
+    }
+
+    /** Task con opzioni, senza avviso immediato. */
+    public TaskDef(long id, int subopNo, String text, String roleCode, int requiredWeight, AssigneeMode assigneeMode,
+                   String assigneeHandlerCode, boolean teamTask, String teamCode, PreviewMode previewMode,
+                   Interaction interaction, String taskParam, List<HookDef> hooks, List<OptionDef> options) {
+        this(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask, teamCode,
+                previewMode, interaction, taskParam, hooks, options, NotifyMode.NONE);
     }
 
     /** Task senza opzioni (Approva / Respingi). */
@@ -33,7 +43,7 @@ public record TaskDef(
                    String assigneeHandlerCode, boolean teamTask, String teamCode, PreviewMode previewMode,
                    Interaction interaction, String taskParam, List<HookDef> hooks) {
         this(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask, teamCode,
-                previewMode, interaction, taskParam, hooks, List.of());
+                previewMode, interaction, taskParam, hooks, List.of(), NotifyMode.NONE);
     }
 
     /** Nodo di scelta: al posto di Approva/Respingi l'utente deve scegliere un'opzione. */
@@ -45,7 +55,12 @@ public record TaskDef(
 
     public TaskDef withOptions(List<OptionDef> opts) {
         return new TaskDef(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask,
-                teamCode, previewMode, interaction, taskParam, hooks, opts);
+                teamCode, previewMode, interaction, taskParam, hooks, opts, notifyMode);
+    }
+
+    public TaskDef withNotify(NotifyMode mode) {
+        return new TaskDef(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask,
+                teamCode, previewMode, interaction, taskParam, hooks, options, mode);
     }
 
     public List<HookDef> hooks(HookEvent event) {

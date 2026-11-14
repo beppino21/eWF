@@ -30,12 +30,18 @@ public final class JdbcOrgWriter {
 
     public long addUser(Long id, String login, String displayName, String sapUser, int weight,
                         String email, boolean active) {
+        return addUser(id, login, displayName, sapUser, weight, email, active, null);
+    }
+
+    /** mailEveryDays: giorni fra due riepiloghi per mail (null = nessun riepilogo). */
+    public long addUser(Long id, String login, String displayName, String sapUser, int weight,
+                        String email, boolean active, Integer mailEveryDays) {
         return db.with(c -> {
             String sql = id == null
-                    ? "INSERT INTO ewf_org.app_user(login, display_name, sap_user, weight, email, active) "
-                      + "VALUES (?, ?, ?, ?, ?, ?) RETURNING id"
-                    : "INSERT INTO ewf_org.app_user(id, login, display_name, sap_user, weight, email, active) "
-                      + "OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id";
+                    ? "INSERT INTO ewf_org.app_user(login, display_name, sap_user, weight, email, active, mail_every_days) "
+                      + "VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id"
+                    : "INSERT INTO ewf_org.app_user(id, login, display_name, sap_user, weight, email, active, mail_every_days) "
+                      + "OVERRIDING SYSTEM VALUE VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id";
             try (PreparedStatement ps = c.prepareStatement(sql)) {
                 int i = 1;
                 if (id != null) ps.setLong(i++, id);
@@ -44,7 +50,9 @@ public final class JdbcOrgWriter {
                 ps.setString(i++, sapUser);
                 ps.setInt(i++, weight);
                 ps.setString(i++, email);
-                ps.setBoolean(i, active);
+                ps.setBoolean(i++, active);
+                if (mailEveryDays == null) ps.setNull(i, java.sql.Types.INTEGER);
+                else ps.setInt(i, mailEveryDays);
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     return rs.getLong(1);

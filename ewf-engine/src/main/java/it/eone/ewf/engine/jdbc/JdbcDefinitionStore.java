@@ -204,7 +204,7 @@ public final class JdbcDefinitionStore implements DefinitionStore {
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT t.id, t.step_id, t.subop_no, t.text, t.role_code, t.required_weight,
                            t.assignee_mode, h.code AS assignee_handler, t.team_task, t.team_code,
-                           t.preview_mode, t.interaction, t.task_param
+                           t.preview_mode, t.interaction, t.task_param, t.notify
                       FROM ewf_core.task_def t
                       JOIN ewf_core.step_def s ON s.id = t.step_id
                       LEFT JOIN ewf_core.handler h ON h.id = t.assignee_handler_id
@@ -220,7 +220,8 @@ public final class JdbcDefinitionStore implements DefinitionStore {
                                 rs.getString("assignee_handler"), rs.getBoolean("team_task"), rs.getString("team_code"),
                                 PreviewMode.valueOf(rs.getString("preview_mode")),
                                 Interaction.valueOf(rs.getString("interaction")), rs.getString("task_param"),
-                                hooks.getOrDefault(id, List.of()), options.getOrDefault(id, List.of())));
+                                hooks.getOrDefault(id, List.of()), options.getOrDefault(id, List.of()),
+                                NotifyMode.valueOf(rs.getString("notify"))));
                     }
                 }
             }

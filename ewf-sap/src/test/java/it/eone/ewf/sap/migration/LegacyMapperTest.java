@@ -133,8 +133,8 @@ class LegacyMapperTest {
         assertEquals(AssigneeMode.RULES, t20.assigneeMode());
         assertEquals(List.of("/EWF/WF_CHECK_LOCK_EKKO"),
                 t20.hooks(HookEvent.BEFORE_ACTION).stream().map(HookDef::handlerCode).toList());
-        assertEquals(List.of("/EWF/SEND_MAIL_NEW_TASK"),
-                t20.hooks(HookEvent.ON_ACTIVATE).stream().map(HookDef::handlerCode).toList());
+        assertTrue(t20.hooks(HookEvent.ON_ACTIVATE).isEmpty(),
+                "la mail legacy non si migra: la sostituiscono riepilogo e avviso immediato di eWF");
         assertTrue(t20.hooks(HookEvent.ON_OK).isEmpty(), "WF_DUMMY non diventa un aggancio");
     }
 

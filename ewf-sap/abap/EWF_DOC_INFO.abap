@@ -14,8 +14,11 @@ FUNCTION /ewf/doc_info.
 *"      ET_ITEMS   STRUCTURE  /EWF/S_DOC_ITEM
 *"----------------------------------------------------------------------
 * Adattatore documento del motore eWF (sola lettura).
-* Restituisce: esistenza, valore (divisa standard del mandante, come
-* /EWF/WF_DOCVALUE) e attributi per le regole di assegnazione.
+* Restituisce: esistenza, valore e attributi per le regole.
+* OdA/contratti (F, K): stesso estrattore della coda (/EWF/CTX_PO), quindi
+*   gli stessi attributi; valore nella divisa del documento (il motore
+*   converte).
+* Altri tipi: valore nella divisa standard del mandante (/EWF/WF_DOCVALUE).
 * Riusa /EWF/WF_DOCVALUE e /EWF/WF_BUKRS_WERKS: i tipi documento gia'
 * aggiunti presso i clienti continuano a funzionare.
 *
@@ -42,7 +45,6 @@ FUNCTION /ewf/doc_info.
         lv_tp    TYPE char01,
         lv_err   TYPE char01,
         lt_ekpo  TYPE STANDARD TABLE OF ekpo,
-        ls_ekpo  TYPE ekpo,
         lt_eban  TYPE STANDARD TABLE OF eban,
         ls_eban  TYPE eban,
         ls_item  TYPE /ewf/s_doc_item,
@@ -72,28 +74,24 @@ FUNCTION /ewf/doc_info.
         CONCATENATE 'Documento' lv_ebeln 'inesistente' INTO e_message SEPARATED BY space.
         RETURN.
       ENDIF.
-      IF ls_ekko-loekz IS NOT INITIAL.
-        CONCATENATE 'Documento' lv_ebeln 'cancellato' INTO e_message SEPARATED BY space.
-        RETURN.
+      SELECT * FROM ekpo INTO TABLE lt_ekpo WHERE ebeln = lv_ebeln.
+      CALL FUNCTION '/EWF/CTX_PO'
+        EXPORTING
+          is_ekko    = ls_ekko
+        IMPORTING
+          e_exists   = e_exists
+          e_netwr    = e_netwr
+          e_waers    = e_waers
+        TABLES
+          it_ekpo    = lt_ekpo
+          et_context = et_context
+          et_items   = et_items.
+      IF e_exists IS INITIAL.
+        CONCATENATE 'Documento' lv_ebeln 'cancellato o senza posizioni attive'
+          INTO e_message SEPARATED BY space.
       ENDIF.
-      e_exists = 'X'.
-      add_ctx 'EKGRP' ls_ekko-ekgrp.
-      add_ctx 'EKORG' ls_ekko-ekorg.
-      add_ctx 'LIFNR' ls_ekko-lifnr.
-      add_ctx 'BSART' ls_ekko-bsart.
-*     posizioni non cancellate
-      SELECT * FROM ekpo INTO TABLE lt_ekpo
-        WHERE ebeln = lv_ebeln AND loekz = space
-        ORDER BY ebelp.
-      LOOP AT lt_ekpo INTO ls_ekpo.
-        CLEAR ls_item.
-        ls_item-item  = ls_ekpo-ebelp.
-        ls_item-menge = ls_ekpo-menge.
-        ls_item-meins = ls_ekpo-meins.
-        ls_item-netwr = ls_ekpo-netwr.
-        ls_item-waers = ls_ekko-waers.
-        APPEND ls_item TO et_items.
-      ENDLOOP.
+*     valore e attributi gia' completi: niente punti 2 e 3
+      RETURN.
 
     WHEN 'B'.                                          " RdA
       lv_banfn = i_document.
@@ -145,7 +143,7 @@ FUNCTION /ewf/doc_info.
   ENDCASE.
 
 *--- 2. Societa' e divisione: come WF_USER_TASK (prima posizione non cancellata)
-  IF i_tipodoc = 'F' OR i_tipodoc = 'K' OR i_tipodoc = 'B'.
+  IF i_tipodoc = 'B'.
     lv_doc32 = i_document.
     lv_tp    = i_tipodoc.
     CALL FUNCTION '/EWF/WF_BUKRS_WERKS'

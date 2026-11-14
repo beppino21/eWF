@@ -99,8 +99,8 @@ public final class JdbcDefinitionWriter {
                     try (PreparedStatement ps = c.prepareStatement("""
                             INSERT INTO ewf_core.task_def(step_id, subop_no, text, role_code, required_weight,
                                    assignee_mode, assignee_handler_id, team_task, team_code, preview_mode,
-                                   interaction, task_param)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""")) {
+                                   interaction, task_param, notify)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""")) {
                         ps.setLong(1, stepId);
                         ps.setInt(2, t.subopNo());
                         ps.setString(3, t.text());
@@ -113,6 +113,7 @@ public final class JdbcDefinitionWriter {
                         ps.setString(10, t.previewMode().name());
                         ps.setString(11, t.interaction().name());
                         ps.setString(12, t.taskParam());
+                        ps.setString(13, t.notifyMode().name());
                         taskId = single(ps);
                     }
                     int seq = 0;

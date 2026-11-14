@@ -121,7 +121,8 @@ public final class LegacyMapper {
             String sap = r.getOrDefault("UNAME_SAP", "");
             boolean active = !"X".equals(r.get("ANNULLATO"));
             plan.users.add(new MigrationPlan.User(login, name.isEmpty() ? login : name,
-                    sap.isBlank() ? login : sap, intOf(r.get("PUNTEGGIO")), blankToNull(r.get("MAIL")), active));
+                    sap.isBlank() ? login : sap, intOf(r.get("PUNTEGGIO")), blankToNull(r.get("MAIL")), active,
+                    r.getOrDefault("GG_MAIL", "").isBlank() ? null : intOf(r.get("GG_MAIL"))));
             logins.add(login);
             String team = r.getOrDefault("TEAM", "");
             if (!team.isBlank()) {
@@ -338,9 +339,21 @@ public final class LegacyMapper {
         return m == null ? AssigneeMode.RULES : m;
     }
 
-        private void hook(List<HookDef> hooks, HookEvent ev, String fm, String label, String where) {
+        /** Riepilogo mail legacy: in eWF lo sostituiscono il riepilogo periodico e l'avviso immediato configurabile. */
+    static final String LEGACY_MAIL_FM = "/EWF/SEND_MAIL_NEW_TASK";
+    private boolean legacyMailNoted;
+
+    private void hook(List<HookDef> hooks, HookEvent ev, String fm, String label, String where) {
         String h = handlerOrNull(fm);
         if (h == null) return;
+        if (ev == HookEvent.ON_ACTIVATE && LEGACY_MAIL_FM.equalsIgnoreCase(h)) {
+            if (!legacyMailNoted) {
+                legacyMailNoted = true;
+                plan.issues.add(Issue.info("Processi", where, LEGACY_MAIL_FM + " non migrata (su tutti i task): "
+                        + "sostituita dal riepilogo eWF (mail_every_days) e dall'avviso immediato impostabile per task"));
+            }
+            return;
+        }
         hooks.add(new HookDef(ev, 1, h, Map.of(), label));
         useHandler(h, "TASK_ACTION", where + " " + ev);
     }

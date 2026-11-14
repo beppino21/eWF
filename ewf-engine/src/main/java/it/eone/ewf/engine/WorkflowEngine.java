@@ -478,6 +478,8 @@ public final class WorkflowEngine {
             n.assigneeId = to.id(); n.teamCode = null; n.roleCode = t.roleCode;
             n.fromUserId = actorId; n.createdAt = now();
             n = store.insertTask(n);
+            if (td.notifyMode() == NotifyMode.IMMEDIATE)
+                store.addNotification(PendingNotification.TASK_ACTIVATED, p.id, n.id);
             audit("TASK_MOVED", actorId, "USER", p.id, t.id, Map.of("to", to.login(), "newTask", String.valueOf(n.id)));
             return n.id;
         }));
@@ -624,12 +626,8 @@ public final class WorkflowEngine {
                         : restartAll(e, open, "Rilascio azzerato nel sistema di origine");
                 case CHANGED -> open.isEmpty() ? done(e, "Nessun processo aperto: modifica ignorata", null)
                         : changed(e, open);
-                case DELETED -> {
-                    for (ProcessInstance p : open)
-                        cancelInternal(p.id, null, REASON_DOCUMENT_DELETED, "Documento cancellato nel sistema di origine");
-                    yield done(e, open.isEmpty() ? "Nessun processo aperto"
-                            : open.size() + " processi annullati", open.isEmpty() ? null : open.get(0).id);
-                }
+                case DELETED -> deleted(e, open);
+                case TOUCHED -> touched(e, open, starter, warning);
             };
         } catch (EngineException ex) {
             return new EventResult(e.queueId(), EventResult.EventStatus.ERROR,
@@ -639,30 +637,103 @@ public final class WorkflowEngine {
         }
     }
 
+    private EventResult deleted(DocumentEvent e, List<ProcessInstance> open) {
+        for (ProcessInstance p : open)
+            cancelInternal(p.id, null, REASON_DOCUMENT_DELETED, "Documento cancellato nel sistema di origine");
+        return done(e, open.isEmpty() ? "Nessun processo aperto" : open.size() + " processi annullati",
+                open.isEmpty() ? null : open.get(0).id);
+    }
+
+    /**
+     * Evento neutro: decide lo stato.
+     * <ul>
+     *   <li>documento cancellato (fotografia con exists = false): si annullano i processi aperti;</li>
+     *   <li>processi aperti: si riavviano se la modifica supera la tolleranza, altrimenti si prosegue;</li>
+     *   <li>documento nuovo: avvio con le regole;</li>
+     *   <li>documento gia' esistente, gia' approvato o respinto con eWF: nuovo avvio con le regole se la modifica
+     *       supera la tolleranza rispetto all'ultimo processo concluso;</li>
+     *   <li>documento tornato attivo dopo che il suo processo era stato annullato per cancellazione: nuovo avvio;</li>
+     *   <li>documento gia' esistente, mai passato da eWF: niente (es. documenti precedenti all'avvio di eWF);</li>
+     *   <li>ultimo processo annullato a mano o inoltrato: niente (la decisione presa dall'utente resta).</li>
+     * </ul>
+     */
+    private EventResult touched(DocumentEvent e, List<ProcessInstance> open, Long starter, String warning) {
+        if (e.snapshot() != null && !e.snapshot().exists()) return deleted(e, open);
+        if (!open.isEmpty()) return changed(e, open);
+        if (e.isNew()) return startByRules(e, starter, warning);
+
+        List<ProcessInstance> all = store.processesOf(e.docType(), e.documentKey(), e.backend());
+        if (!all.isEmpty()) {
+            ProcessInstance latest = all.get(all.size() - 1);
+            if (latest.status == ProcessStatus.CANCELLED && REASON_DOCUMENT_DELETED.equals(latest.statusReason)) {
+                // Il processo era stato annullato perche' il documento era sparito (es. tutte le posizioni
+                // cancellate); il documento e' tornato attivo: va approvato da capo.
+                EventResult r = startByRules(e, starter, warning);
+                return new EventResult(r.queueId(), r.status(), "Documento riattivato dopo l'annullamento del processo "
+                        + latest.id + ": " + r.message(), r.processId());
+            }
+        }
+        Optional<ProcessInstance> last = all.stream()
+                .filter(p -> p.status == ProcessStatus.COMPLETED || p.status == ProcessStatus.REJECTED)
+                .reduce((a, b) -> b);
+        if (last.isEmpty())
+            return done(e, all.isEmpty() ? "Documento modificato, mai passato da eWF: nessun avvio"
+                    : "Documento modificato; ultimo processo " + all.get(all.size() - 1).id + " "
+                      + all.get(all.size() - 1).status + ": nessun avvio automatico", null);
+        ProcessInstance prev = last.get();
+        Optional<DocumentInfo> now = e.snapshot() != null ? Optional.of(e.snapshot())
+                : adapters.find(e.docType()).map(a -> readOrFail(a, e.docType(), e.documentKey()));
+        if (now.isEmpty())
+            return done(e, "Nessun adapter per " + e.docType() + ": modifica non valutabile", prev.id);
+        java.math.BigDecimal tol = defs.processType(prev.processTypeCode)
+                .map(ProcessType::changeTolerancePct).orElse(java.math.BigDecimal.ZERO);
+        String why = relevantChange(prev, now.get(), tol);
+        if (why == null)
+            return done(e, "Modifica non rilevante rispetto al processo " + prev.id + " (" + prev.status + ")", prev.id);
+        EventResult r = startByRules(e, starter, warning);
+        return new EventResult(r.queueId(), r.status(),
+                "Dopo il processo " + prev.id + " (" + prev.status + "), " + why + ": " + r.message(), r.processId());
+    }
+
+    /** Documento dell'evento: la fotografia se c'e', altrimenti la lettura dal sistema di origine. */
+    private Optional<DocumentInfo> eventDocument(DocumentEvent e, ProcessType pt) {
+        if (e.snapshot() != null) {
+            if (!e.snapshot().exists())
+                throw EngineException.of(Code.DOCUMENT_NOT_FOUND, "Documento %s %s cancellato", e.docType(), e.documentKey());
+            return Optional.of(e.snapshot());
+        }
+        return readDocument(pt, e.documentKey());
+    }
+
+    private static DocumentInfo readOrFail(DocumentAdapter a, String docType, String key) {
+        DocumentInfo d;
+        try {
+            d = a.read(key);
+        } catch (RuntimeException ex) {
+            throw EngineException.of(Code.BACKEND_UNAVAILABLE, "Impossibile leggere il documento %s %s: %s",
+                    docType, key, ex.getMessage());
+        }
+        if (!d.exists())
+            throw EngineException.of(Code.DOCUMENT_NOT_FOUND, "Documento %s %s non trovato%s", docType, key,
+                    d.message() == null ? "" : ": " + d.message());
+        return d;
+    }
+
     private static EventResult done(DocumentEvent e, String message, Long processId) {
         return new EventResult(e.queueId(), EventResult.EventStatus.DONE, message, processId);
     }
 
     /** Documento nuovo: la regola di avvio applicabile sceglie il processo. */
     private EventResult startByRules(DocumentEvent e, Long starter, String warning) {
-        Optional<DocumentAdapter> adapter = adapters.find(e.docType());
-        Map<String, String> ctx = Map.of();
-        Optional<DocumentInfo> info = Optional.empty();
-        if (adapter.isPresent()) {
-            DocumentInfo d;
-            try {
-                d = adapter.get().read(e.documentKey());
-            } catch (RuntimeException ex) {
-                throw EngineException.of(Code.BACKEND_UNAVAILABLE, "Impossibile leggere il documento %s %s: %s",
-                        e.docType(), e.documentKey(), ex.getMessage());
-            }
-            if (!d.exists())
-                throw EngineException.of(Code.DOCUMENT_NOT_FOUND, "Documento %s %s non trovato%s", e.docType(),
-                        e.documentKey(), d.message() == null ? "" : ": " + d.message());
-            info = Optional.of(d);
-            ctx = d.context();
+        Optional<DocumentInfo> info;
+        if (e.snapshot() != null) {
+            if (!e.snapshot().exists())
+                throw EngineException.of(Code.DOCUMENT_NOT_FOUND, "Documento %s %s cancellato", e.docType(), e.documentKey());
+            info = Optional.of(e.snapshot());
+        } else {
+            info = adapters.find(e.docType()).map(a -> readOrFail(a, e.docType(), e.documentKey()));
         }
-        Map<String, String> context = ctx;
+        Map<String, String> context = info.map(DocumentInfo::context).orElse(Map.of());
         Optional<StartRule> rule = defs.startRules(e.docType()).stream()
                 .filter(r -> r.matches(context))
                 .max(Comparator.comparingInt(StartRule::priority)
@@ -681,7 +752,7 @@ public final class WorkflowEngine {
         Long last = null;
         for (ProcessInstance p : open) {
             ProcessType pt = startableType(p.processTypeCode);
-            last = restartInternal(p, pt, null, note, readDocument(pt, p.documentKey)).id;
+            last = restartInternal(p, pt, null, note, eventDocument(e, pt)).id;
         }
         return done(e, "Riavviati " + open.size() + " processi: " + note, last);
     }
@@ -692,7 +763,7 @@ public final class WorkflowEngine {
         List<String> notes = new ArrayList<>();
         for (ProcessInstance p : open) {
             ProcessType pt = startableType(p.processTypeCode);
-            Optional<DocumentInfo> doc = readDocument(pt, p.documentKey);
+            Optional<DocumentInfo> doc = eventDocument(e, pt);
             if (doc.isEmpty()) {
                 notes.add(p.id + ": nessun adapter, modifica non valutabile");
                 continue;
@@ -926,6 +997,8 @@ public final class WorkflowEngine {
                     t.fromUserId = act.actorId();
                     t.createdAt = now();
                     t = store.insertTask(t);
+                    if (td.notifyMode() == NotifyMode.IMMEDIATE)
+                        store.addNotification(PendingNotification.TASK_ACTIVATED, p.id, t.id);
                     Map<String, String> pl = new LinkedHashMap<>();
                     pl.put("step", String.valueOf(s.stepNo()));
                     if (a.userId() != null) pl.put("assignee", String.valueOf(a.userId()));

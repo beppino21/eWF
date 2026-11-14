@@ -829,6 +829,146 @@ abstract class WorkflowEngineContract {
         assertEquals(WorkflowEngine.REASON_DOCUMENT_DELETED, f.store.process(p.id).orElseThrow().statusReason);
     }
 
+    // --- notifiche -----------------------------------------------------------------
+
+    @Test
+    void avvisoImmediatoSoloPerITaskCheLoPrevedono() {
+        ProcessInstance p = f.startAvviso("4500000900");
+        assertTrue(f.store.pendingNotifications(10).isEmpty(), "il task di richiesta non prevede avviso");
+        f.ok(f.openTask(p.id).id, ROSSI);
+        TaskInstance rel = f.openTask(p.id);
+        List<it.eone.ewf.engine.spi.PendingNotification> n = f.store.pendingNotifications(10);
+        assertEquals(1, n.size());
+        assertEquals(it.eone.ewf.engine.spi.PendingNotification.TASK_ACTIVATED, n.get(0).kind());
+        assertEquals(rel.id, n.get(0).taskId());
+        assertEquals(p.id, n.get(0).processId());
+
+        f.store.notificationDone(n.get(0).id(), "mail 1");
+        assertTrue(f.store.pendingNotifications(10).isEmpty());
+
+        long moved = f.engine.move(rel.id, rel.assigneeId, VERDI, "ferie");
+        List<it.eone.ewf.engine.spi.PendingNotification> m = f.store.pendingNotifications(10);
+        assertEquals(1, m.size(), "spostato a un'altra persona: anche lei va avvisata");
+        assertEquals(moved, m.get(0).taskId());
+    }
+
+    // --- evento neutro TOUCHED con fotografia del documento ------------------------
+
+    private static it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo photo(String eur, Map<String, String> ctx,
+                                                                             DocItem... items) {
+        return new it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo(true, Money.of(eur, "EUR"), ctx, null,
+                List.of(items));
+    }
+
+    private static final it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo GONE =
+            new it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo(false, null, Map.of(), "cancellato", List.of());
+
+    private Requests.EventResult touched(String key, boolean isNew,
+                                         it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo snapshot) {
+        return f.engine.onDocumentEvent(new Requests.DocumentEvent("T-" + key + "-" + System.nanoTime(), "F", key, null,
+                Requests.DocumentEventType.TOUCHED, "MROSSI", isNew, snapshot));
+    }
+
+    private static DocItem item(String k, String qty, String val) {
+        return new DocItem(k, new java.math.BigDecimal(qty), new java.math.BigDecimal(val));
+    }
+
+    @Test
+    void toccatoNuovoAvviaConLaFotografiaSenzaRileggereIlDocumento() {
+        startRules();
+        int reads = f.purchaseOrders.reads();
+        Requests.EventResult r = touched("4500000820", true,
+                photo("3702", Map.of("sap.BSART", "ZCL", "plant", "D030"), item("00010", "1234", "3702")));
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status(), r.message());
+        ProcessInstance p = theOpen("4500000820");
+        assertEquals(AVVIO, p.processTypeCode, "regola scelta sugli attributi della fotografia");
+        assertEquals(0, new java.math.BigDecimal("3702").compareTo(p.value.amount()));
+        assertEquals("D030", p.docContext.get("plant"));
+        assertEquals(List.of(item("00010", "1234", "3702")), p.docItems, "posizioni fotografate dalla coda");
+        assertEquals(reads, f.purchaseOrders.reads(), "nessuna chiamata al sistema di origine");
+    }
+
+    @Test
+    void toccatoConProcessoApertoRiavviaSoloSeLaPosizioneCambia() {
+        startRules();
+        touched("4500000821", true, photo("1000", Map.of(), item("00010", "10", "1000")));
+        ProcessInstance p = theOpen("4500000821");
+
+        Requests.EventResult same = touched("4500000821", false, photo("1000", Map.of(), item("00010", "10", "1000")));
+        assertEquals(p.id, theOpen("4500000821").id, "stessa fotografia: si prosegue");
+        assertTrue(same.message().contains("non rilevante"), same.message());
+
+        Requests.EventResult qty = touched("4500000821", false, photo("1200", Map.of(), item("00010", "12", "1200")));
+        assertTrue(qty.message().contains("posizione 00010"), qty.message());
+        assertEquals(ProcessStatus.CANCELLED, f.status(p.id));
+        ProcessInstance n = theOpen("4500000821");
+        assertEquals(0, new java.math.BigDecimal("1200").compareTo(n.value.amount()), "il riavvio usa la nuova fotografia");
+    }
+
+    @Test
+    void toccatoCancellatoAnnullaIProcessiAperti() {
+        startRules();
+        touched("4500000822", true, photo("1000", Map.of(), item("00010", "1", "1000")));
+        ProcessInstance p = theOpen("4500000822");
+        touched("4500000822", false, GONE);
+        assertEquals(ProcessStatus.CANCELLED, f.status(p.id));
+        assertEquals(WorkflowEngine.REASON_DOCUMENT_DELETED, f.store.process(p.id).orElseThrow().statusReason);
+    }
+
+    @Test
+    void toccatoRiattivatoDopoLaCancellazioneRiparte() {
+        startRules();
+        touched("4500000825", true, photo("1000", Map.of(), item("00010", "1", "1000")));
+        ProcessInstance p = theOpen("4500000825");
+        touched("4500000825", false, GONE);                       // tutte le posizioni cancellate
+        assertEquals(ProcessStatus.CANCELLED, f.status(p.id));
+        Requests.EventResult r = touched("4500000825", false,     // aggiunta una posizione nuova
+                photo("3000", Map.of(), item("00030", "1000", "3000")));
+        assertTrue(r.message().startsWith("Documento riattivato dopo l'annullamento del processo " + p.id), r.message());
+        ProcessInstance n = theOpen("4500000825");
+        assertEquals(List.of(item("00030", "1000", "3000")), n.docItems);
+    }
+
+    @Test
+    void toccatoDopoUnAnnullamentoManualeNonRiparte() {
+        startRules();
+        touched("4500000826", true, photo("1000", Map.of(), item("00010", "1", "1000")));
+        ProcessInstance p = theOpen("4500000826");
+        f.engine.cancel(p.id, ADMIN, "non serve");
+        Requests.EventResult r = touched("4500000826", false, photo("1200", Map.of(), item("00010", "2", "1200")));
+        assertTrue(r.message().contains("nessun avvio automatico"), r.message());
+        assertTrue(f.store.openProcesses("F", "4500000826", null).isEmpty());
+    }
+
+    @Test
+    void toccatoMaiPassatoDaEwfNonAvvia() {
+        startRules();
+        Requests.EventResult r = touched("4500000823", false, photo("1000", Map.of(), item("00010", "1", "1000")));
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status());
+        assertTrue(r.message().contains("mai passato da eWF"), r.message());
+        assertTrue(f.store.processesOf("F", "4500000823", null).isEmpty(),
+                "documenti precedenti a eWF: una modifica non avvia l'approvazione");
+    }
+
+    @Test
+    void toccatoDopoUnApprovazioneConclusaRiapprovaSoloSeCambiaQualcosa() {
+        startRules();
+        touched("4500000824", true, photo("5000", Map.of("plant", "1000"), item("00010", "5", "5000")));
+        ProcessInstance p = theOpen("4500000824");
+        f.ok(f.openTask(p.id).id, ROSSI);
+        f.ok(f.openTask(p.id).id, BIANCHI);
+        assertEquals(ProcessStatus.COMPLETED, f.status(p.id));
+
+        Requests.EventResult same = touched("4500000824", false, photo("5000", Map.of(), item("00010", "5", "5000")));
+        assertTrue(f.store.openProcesses("F", "4500000824", null).isEmpty(), same.message());
+
+        Requests.EventResult more = touched("4500000824", false,
+                photo("5000", Map.of(), item("00010", "5", "5000"), item("00020", "1", "100")));
+        assertTrue(more.message().contains("posizione 00020 aggiunta"), more.message());
+        ProcessInstance n = theOpen("4500000824");
+        assertTrue(n.id != p.id, "nuova approvazione dopo quella conclusa");
+    }
+
     @Test
     void sistemaIrraggiungibileErroreDaRitentareENessunProcesso() {
         startRules();

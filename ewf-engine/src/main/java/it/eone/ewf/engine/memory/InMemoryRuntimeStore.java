@@ -1,6 +1,7 @@
 package it.eone.ewf.engine.memory;
 
 import it.eone.ewf.engine.model.*;
+import it.eone.ewf.engine.spi.PendingNotification;
 import it.eone.ewf.engine.spi.RuntimeStore;
 
 import java.util.*;
@@ -46,6 +47,31 @@ public final class InMemoryRuntimeStore implements RuntimeStore {
     @Override public synchronized List<ProcessInstance> openProcesses(String docType, String key, String backend) {
         return processes.values().stream().filter(p -> p.docType.equals(docType) && p.documentKey.equals(key)
                         && Objects.equals(p.backendCode, backend) && p.status.isOpen())
+                .sorted(java.util.Comparator.comparingLong(p -> p.id)).map(ProcessInstance::copy).toList();
+    }
+
+    private final List<PendingNotification> notifications = new ArrayList<>();
+    private final Map<Long, String> notificationResults = new HashMap<>();
+    private long notificationSeq;
+
+    @Override public synchronized void addNotification(String kind, long processId, long taskId) {
+        notifications.add(new PendingNotification(++notificationSeq, kind, processId, taskId, java.time.Instant.now()));
+    }
+
+    @Override public synchronized List<PendingNotification> pendingNotifications(int max) {
+        return notifications.stream().filter(n -> !notificationResults.containsKey(n.id())).limit(max).toList();
+    }
+
+    @Override public synchronized void notificationDone(long id, String result) {
+        notificationResults.put(id, result);
+    }
+
+    /** Solo per i test: esito di una notifica. */
+    public synchronized String notificationResult(long id) { return notificationResults.get(id); }
+
+    @Override public synchronized List<ProcessInstance> processesOf(String docType, String key, String backend) {
+        return processes.values().stream().filter(p -> p.docType.equals(docType) && p.documentKey.equals(key)
+                        && Objects.equals(p.backendCode, backend))
                 .sorted(java.util.Comparator.comparingLong(p -> p.id)).map(ProcessInstance::copy).toList();
     }
 

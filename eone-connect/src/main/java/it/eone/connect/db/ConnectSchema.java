@@ -18,7 +18,7 @@ public final class ConnectSchema {
 
     public static final String SCHEMA = "eone_connect";
     /** Versione richiesta da questa libreria. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     private ConnectSchema() { }
 

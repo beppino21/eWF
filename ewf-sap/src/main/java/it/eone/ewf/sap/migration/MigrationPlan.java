@@ -10,7 +10,9 @@ import java.util.*;
 /** Cosa verra' scritto: oggetti del nuovo modello, con riferimenti agli utenti per login. */
 public final class MigrationPlan {
 
-    public record User(String login, String displayName, String sapUser, int weight, String email, boolean active) {}
+    /** mailEveryDays: ex GG_MAIL, giorni fra due riepiloghi (null o 0 = nessun riepilogo). */
+    public record User(String login, String displayName, String sapUser, int weight, String email, boolean active,
+                       Integer mailEveryDays) {}
     public record Rule(String processType, String role, String purchasingGroup, String plant, String storageLocation,
                        BigDecimal amountFrom, BigDecimal amountTo, String currency, String userLogin,
                        LocalDate validFrom, LocalDate validTo, String source) {}

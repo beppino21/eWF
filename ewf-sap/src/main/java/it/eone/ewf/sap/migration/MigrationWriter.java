@@ -54,7 +54,8 @@ public final class MigrationWriter {
                 plan.teams.forEach(org::ensureTeam);
                 Map<String, Long> ids = new HashMap<>();
                 for (MigrationPlan.User u : plan.users)
-                    ids.put(u.login(), org.addUser(null, u.login(), u.displayName(), u.sapUser(), u.weight(), u.email(), u.active()));
+                    ids.put(u.login(), org.addUser(null, u.login(), u.displayName(), u.sapUser(), u.weight(), u.email(), u.active(),
+                            u.mailEveryDays()));
                 for (MigrationPlan.Member m : plan.members) org.teamMember(m.team(), ids.get(m.userLogin()));
                 for (MigrationPlan.Rule r : plan.rules)
                     org.addRule(new AssignmentRule(0, r.processType(), r.role(), r.purchasingGroup(), r.plant(),

@@ -1,6 +1,7 @@
 package it.eone.ewf.engine.jdbc;
 
 import it.eone.ewf.engine.model.*;
+import it.eone.ewf.engine.spi.PendingNotification;
 import it.eone.ewf.engine.spi.RuntimeStore;
 
 import java.sql.*;
@@ -166,6 +167,70 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                      FROM ewf_core.process_instance
                     WHERE doc_type = ? AND document_key = ? AND backend_code IS NOT DISTINCT FROM ?
                       AND status IN ('RUNNING','SUSPENDED','COMPLETING','ERROR') ORDER BY id""")) {
+                ps.setString(1, docType);
+                ps.setString(2, key);
+                ps.setString(3, backend);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) out.add(process(rs));
+                }
+            }
+            return out;
+        });
+    }
+
+    @Override
+    public void addNotification(String kind, long processId, long taskId) {
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "INSERT INTO ewf_core.notification(kind, process_id, task_id) VALUES (?, ?, ?)")) {
+                ps.setString(1, kind);
+                ps.setLong(2, processId);
+                ps.setLong(3, taskId);
+                ps.executeUpdate();
+            }
+            return null;
+        });
+    }
+
+    @Override
+    public List<PendingNotification> pendingNotifications(int max) {
+        return db.with(c -> {
+            List<PendingNotification> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT id, kind, process_id, task_id, created_at FROM ewf_core.notification
+                     WHERE processed_at IS NULL ORDER BY id LIMIT ?""")) {
+                ps.setInt(1, max);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next())
+                        out.add(new PendingNotification(rs.getLong(1), rs.getString(2), rs.getLong(3), rs.getLong(4),
+                                rs.getTimestamp(5).toInstant()));
+                }
+            }
+            return out;
+        });
+    }
+
+    @Override
+    public void notificationDone(long id, String result) {
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "UPDATE ewf_core.notification SET processed_at = now(), result = ? WHERE id = ?")) {
+                ps.setString(1, result == null ? null : result.length() > 200 ? result.substring(0, 200) : result);
+                ps.setLong(2, id);
+                ps.executeUpdate();
+            }
+            return null;
+        });
+    }
+
+    @Override
+    public List<ProcessInstance> processesOf(String docType, String key, String backend) {
+        return db.with(c -> {
+            List<ProcessInstance> out = new ArrayList<>();
+            try (PreparedStatement ps = c.prepareStatement("SELECT " + P_COLS + """
+                     FROM ewf_core.process_instance
+                    WHERE doc_type = ? AND document_key = ? AND backend_code IS NOT DISTINCT FROM ?
+                    ORDER BY id""")) {
                 ps.setString(1, docType);
                 ps.setString(2, key);
                 ps.setString(3, backend);

@@ -25,11 +25,29 @@ public final class Requests {
         /** Documento modificato senza strategia di rilascio: eWF confronta valore e quantita' con l'avvio. */
         CHANGED,
         /** Documento cancellato: i processi aperti si annullano. */
-        DELETED
+        DELETED,
+        /**
+         * Evento neutro: "il documento e' stato toccato". eWF decide dallo stato del documento (fotografia
+         * dell'evento, o lettura) e dei suoi processi: avvio, riavvio, annullamento o niente.
+         */
+        TOUCHED
     }
 
+    /**
+     * Riga della coda degli avvii.
+     * isNew: documento creato in quel salvataggio (un fatto riportato dal sistema di origine).
+     * snapshot: fotografia del documento al salvataggio (valore, attributi, posizioni). Se presente, eWF la usa
+     *   al posto della lettura tramite adapter: niente chiamate di ritorno al sistema di origine.
+     *   snapshot.exists() == false: documento cancellato.
+     */
     public record DocumentEvent(String queueId, String docType, String documentKey, String backend,
-                                DocumentEventType type, String sapUser) {}
+                                DocumentEventType type, String sapUser, boolean isNew,
+                                it.eone.ewf.engine.spi.DocumentAdapter.DocumentInfo snapshot) {
+        public DocumentEvent(String queueId, String docType, String documentKey, String backend,
+                             DocumentEventType type, String sapUser) {
+            this(queueId, docType, documentKey, backend, type, sapUser, false, null);
+        }
+    }
 
     public record EventResult(String queueId, EventStatus status, String message, Long processId) {
         public enum EventStatus { DONE, WARNING, ERROR }

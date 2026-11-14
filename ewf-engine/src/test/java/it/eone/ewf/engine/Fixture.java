@@ -194,6 +194,23 @@ final class Fixture {
                         List.of(task(4201, "Gestione reclamo", null, 0, AssigneeMode.STARTER))))));
     }
 
+    static final String AVVISO = "AVVISO";
+
+    /** 10 richiesta (nessun avviso) -> 20 rilascio con avviso immediato -> fine. */
+    ProcessInstance startAvviso(String ebeln) {
+        if (b.defs().processType(AVVISO).isEmpty()) {
+            b.defineType(new ProcessType(AVVISO, "Processo con avviso", "F", false, false, false));
+            b.activate(new ProcessVersion(50, AVVISO, 1, null, List.of(
+                    new StepDef(10, true, JoinPolicy.ALL, 20, null, null,
+                            List.of(task(5001, "Richiesta", null, 0, AssigneeMode.STARTER))),
+                    new StepDef(20, false, JoinPolicy.ALL, null, 10, null,
+                            List.of(task(5002, "Rilascio", "RESPONSABILE_ACQ", 100, AssigneeMode.RULES)
+                                    .withNotify(NotifyMode.IMMEDIATE))))));
+        }
+        purchaseOrders.value(ebeln, Money.of("1000", "EUR"));
+        return engine.start(new Requests.Start(AVVISO, ebeln, null, ROSSI, null));
+    }
+
     ProcessInstance startAvvio(String ebeln, String amountEur) {
         defineStartProcesses();
         purchaseOrders.value(ebeln, Money.of(amountEur, "EUR"));

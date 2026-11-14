@@ -47,9 +47,9 @@ class SchedulerPostgresTest {
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> scheduler("A", new JobRegistry()).start());
         assertTrue(e.getMessage().contains("ConnectSchemaTool"), e.getMessage());
-        assertEquals(1, ConnectSchema.migrate(db, null));
-        assertEquals(1, ConnectSchema.migrate(db, null), "idempotente");
-        assertEquals(1, ConnectSchema.installedVersion(db));
+        assertEquals(ConnectSchema.VERSION, ConnectSchema.migrate(db, null));
+        assertEquals(ConnectSchema.VERSION, ConnectSchema.migrate(db, null), "idempotente");
+        assertEquals(ConnectSchema.VERSION, ConnectSchema.installedVersion(db));
     }
 
     @Test

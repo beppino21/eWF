@@ -19,6 +19,7 @@ import it.eone.ewf.engine.StartQueueProcessor;
 import it.eone.ewf.engine.model.StartRule;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -43,6 +44,12 @@ import java.util.Arrays;
  *   regole &lt;tipodoc&gt;                      elenca le regole di avvio
  *   servizio                              scheduler eone-connect: coda degli avvii ogni 30s, fino a Ctrl+C
  *   lavori [codice]                       job pianificati e ultime esecuzioni
+ *   avviso &lt;processo&gt; &lt;step&gt; IMMEDIATE|NONE   avviso immediato per i task di uno step (versione attiva)
+ *   posta                                 ultime mail in coda di uscita, con esito
+ *   esegui &lt;codice job&gt;                    fa partire un job al prossimo giro del servizio (es. EWF_MAIL_DIGEST)
+ *   mailprova &lt;indirizzo&gt;                  invio diretto di prova: verifica la configurazione EONE_SMTP_*
+ * Mail: EONE_SMTP_HOST, _PORT, _SECURITY, _AUTH, _USER, _PASSWORD, _FROM, (OAuth2) _OAUTH_TENANT, _OAUTH_CLIENT_ID,
+ *   _OAUTH_CLIENT_SECRET. Senza EONE_SMTP_HOST il servizio accoda le mail ma non le spedisce.
  *
  * Variabili d'ambiente:
  *   EWF_DB_URL (default jdbc:postgresql://localhost:5432/ewf), EWF_DB_USER (default ewf_app), EWF_DB_PASSWORD
@@ -71,7 +78,7 @@ public final class OdaProbe {
     }
 
     public static void main(String[] args) throws Exception {
-        if (args.length < 1 || (args.length < 2 && !java.util.Set.of("coda", "servizio", "lavori").contains(args[0].toLowerCase()))) {
+        if (args.length < 1 || (args.length < 2 && !java.util.Set.of("coda", "servizio", "lavori", "posta").contains(args[0].toLowerCase()))) {
             System.out.println("""
                     Uso:
                       avvia   <ebeln> <login>
@@ -84,7 +91,11 @@ public final class OdaProbe {
                       regola  <tipodoc> <processo> [priorita'] [chiave=valore ...]
                       regole  <tipodoc>
                       servizio
-                      lavori  [codice]""");
+                      lavori  [codice]
+                      avviso  <processo> <step> IMMEDIATE|NONE
+                      posta
+                      esegui  <codice job>
+                      mailprova <indirizzo>""");
             return;
         }
         OdaProbe p = new OdaProbe();
@@ -147,6 +158,13 @@ public final class OdaProbe {
                         r.processType()));
                 case "servizio" -> p.service();
                 case "lavori" -> p.jobs(args.length > 1 ? args[1] : null);
+                case "avviso" -> { need(args, 4); p.notifyMode(args[1], Integer.parseInt(args[2]), args[3]); }
+                case "posta" -> p.outbox();
+                case "esegui" -> {
+                    new it.eone.connect.scheduler.JobStore(new it.eone.connect.db.Db(p.ds)).runNow(args[1]);
+                    System.out.println("Job " + args[1] + " in partenza al prossimo giro del servizio (entro pochi secondi)");
+                }
+                case "mailprova" -> p.mailTest(args[1]);
                 default -> System.out.println("Comando sconosciuto: " + args[0]);
             }
         } catch (EngineException e) {
@@ -251,7 +269,14 @@ public final class OdaProbe {
     /** Scheduler di eone-connect sullo stesso DB di eWF (schema eone_connect). Piu' istanze insieme: gira una sola. */
     private it.eone.connect.scheduler.Scheduler scheduler() {
         var registry = new it.eone.connect.scheduler.JobRegistry()
-                .register(StartQueueJob.KEY, () -> new StartQueueJob(engine, dest));
+                .register(StartQueueJob.KEY, () -> new StartQueueJob(engine, dest))
+                .register(it.eone.ewf.notify.NotifyJob.KEY,
+                        () -> new it.eone.ewf.notify.NotifyJob(ds, java.time.Clock.systemDefaultZone()))
+                .register(it.eone.ewf.notify.DigestJob.KEY,
+                        () -> new it.eone.ewf.notify.DigestJob(ds, java.time.Clock.systemDefaultZone()));
+        smtp().ifPresent(cfg -> registry.register(it.eone.connect.mail.MailSendJob.KEY,
+                () -> new it.eone.connect.mail.MailSendJob(new it.eone.connect.mail.MailOutbox(new it.eone.connect.db.Db(ds)),
+                        new it.eone.connect.mail.SmtpTransport(cfg), java.time.Clock.systemUTC())));
         return new it.eone.connect.scheduler.Scheduler(new it.eone.connect.db.Db(ds), registry,
                 it.eone.connect.scheduler.Scheduler.Options.defaults());
     }
@@ -261,9 +286,58 @@ public final class OdaProbe {
         s.start();   // verifica lo schema eone_connect: se manca dice come installarlo
         s.store().ensure(StartQueueJob.CODE, StartQueueJob.KEY, "Coda degli avvii /EWF/START_Q (" + dest + ")",
                 "every 30s", "Europe/Rome", true, Map.of("batch", "50"));
+        s.store().ensure(it.eone.ewf.notify.NotifyJob.CODE, it.eone.ewf.notify.NotifyJob.KEY,
+                "Avvisi immediati dei task", "every 1m", "Europe/Rome", true, Map.of("baseUrl", ""));
+        s.store().ensure(it.eone.ewf.notify.DigestJob.CODE, it.eone.ewf.notify.DigestJob.KEY,
+                "Riepilogo periodico delle attivita' (mail_every_days)", "daily 07:15 mon-fri", "Europe/Rome", true,
+                Map.of("baseUrl", ""));
+        s.store().ensure(it.eone.connect.mail.MailSendJob.CODE, it.eone.connect.mail.MailSendJob.KEY,
+                "Spedizione delle mail in coda", "every 1m", "Europe/Rome", true, Map.of("batch", "50"));
+        if (smtp().isEmpty())
+            System.out.println("ATTENZIONE: EONE_SMTP_HOST non impostata: le mail restano in coda (vedi 'posta').");
         Runtime.getRuntime().addShutdownHook(new Thread(s::stop));
         System.out.println("Scheduler attivo sul nodo " + s.node() + ". Ctrl+C (o Stop in Eclipse) per fermarlo.");
         Thread.currentThread().join();
+    }
+
+    /** Configurazione SMTP dalle variabili EONE_SMTP_*, se presente. */
+    private static Optional<it.eone.connect.mail.SmtpConfig> smtp() {
+        if (System.getenv("EONE_SMTP_HOST") == null) return Optional.empty();
+        return Optional.of(it.eone.connect.mail.SmtpConfig.fromEnv("EONE_SMTP", System::getenv));
+    }
+
+    /** Imposta l'avviso immediato sui task di uno step della versione attiva (modifica di prova, senza nuova versione). */
+    private void notifyMode(String processType, int step, String mode) throws Exception {
+        it.eone.ewf.engine.model.NotifyMode m = it.eone.ewf.engine.model.NotifyMode.valueOf(mode.toUpperCase());
+        try (var c = ds.getConnection(); var ps = c.prepareStatement("""
+                UPDATE ewf_core.task_def SET notify = ? WHERE step_id IN (
+                  SELECT s.id FROM ewf_core.step_def s JOIN ewf_core.process_version v ON v.id = s.version_id
+                   WHERE v.process_type_code = ? AND v.status = 'ACTIVE' AND s.step_no = ?)""")) {
+            ps.setString(1, m.name());
+            ps.setString(2, processType);
+            ps.setInt(3, step);
+            int n = ps.executeUpdate();
+            System.out.println(n == 0 ? "Nessun task trovato per " + processType + " step " + step + " (versione attiva)"
+                    : n + " task di " + processType + " step " + step + ": avviso " + m);
+        }
+    }
+
+    private void outbox() {
+        var fmt = java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(java.time.ZoneId.systemDefault());
+        var rows = new it.eone.connect.mail.MailOutbox(new it.eone.connect.db.Db(ds)).recent(null, 30);
+        if (rows.isEmpty()) System.out.println("Coda di uscita vuota");
+        for (var r : rows)
+            System.out.printf("%-5d %s  %-7s tent.%d  %-28s %s%s%n", r.id(), fmt.format(r.createdAt()), r.status(),
+                    r.attempts(), r.to(), r.subject(), r.lastError() == null ? "" : "\n        errore: " + r.lastError());
+    }
+
+    private void mailTest(String to) throws Exception {
+        var cfg = smtp().orElseThrow(() -> new IllegalStateException("EONE_SMTP_HOST non impostata"));
+        System.out.println("Invio di prova via " + cfg.host() + ":" + cfg.port() + " (" + cfg.security() + ", " + cfg.auth()
+                + ") da " + cfg.from() + " a " + to);
+        new it.eone.connect.mail.SmtpTransport(cfg).send(it.eone.connect.mail.MailMessage.of("ewf", to,
+                "eWF: prova di invio", "Se leggi questa mail, la configurazione SMTP di eWF funziona."));
+        System.out.println("Accettata dal server.");
     }
 
     private void jobs(String code) {

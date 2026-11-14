@@ -172,8 +172,8 @@ paralleli chiusi insieme). Senza configurazione i test PostgreSQL vengono **salt
 Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`: mai usare `ewf`):
 
 1. in psql come `postgres`: `CREATE DATABASE ewf_test OWNER ewf_owner ENCODING 'UTF8' TEMPLATE template0;`
-2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.12.sql'`
-   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.11_to_0.12.sql`)
+2. `\c ewf_test`, `SET ROLE ewf_owner;`, `\i '.../db/ewf_schema_v0.13.sql'`
+   (DB di test gia' esistente: applicare le migrazioni mancanti, es. `ewf_migrate_0.12_to_0.13.sql`)
 3. variabili d'ambiente (in Eclipse: *Run Configurations → scheda Environment*):
    `EWF_TEST_DB_URL=jdbc:postgresql://localhost:5432/ewf_test`,
    `EWF_TEST_DB_USER=ewf_owner`, `EWF_TEST_DB_PASSWORD=...`
@@ -181,8 +181,16 @@ Per attivarli serve un database **di test** (ogni test svuota le tabelle `ewf_*`
 ## Database
 
 Cartella `db/`:
-- `ewf_schema_v0.12.sql` – schema completo per un DB nuovo;
-- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.12), da applicare in ordine.
+- `ewf_schema_v0.13.sql` – schema completo per un DB nuovo;
+- `ewf_migrate_X_to_Y.sql` – migrazioni incrementali (0.4 → 0.13), da applicare in ordine.
+
+## Notifiche
+
+Ogni task della definizione ha `notify`: `NONE` (default) o `IMMEDIATE`.
+Quando un task `IMMEDIATE` viene creato (attivazione o spostamento), il motore registra una riga in
+`ewf_core.notification` **nella stessa transazione**. La trasformazione in mail (destinatari, sostituti, modelli
+dei testi `ewf_core.mail_template`) e il riepilogo periodico (`mail_every_days`) sono fuori dal motore: job
+`ewf.notify` ed `ewf.mail-digest` (progetto ewf-sap, poi ewf-server), con la coda di uscita di eone-connect.
 
 ## Limiti noti
 
