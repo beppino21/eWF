@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="d_1" beanbinding="#{d.TaskDetailUI}" >
+<t:filedownload id="d_dl" trigger="#{d.TaskDetailUI.downloadTrigger}" url="#{d.TaskDetailUI.downloadUrl}" />
+</t:beanprocessing>
+<t:rowtitlebar id="d_2" text="#{d.TaskDetailUI.title}" />
+<t:rowheader id="d_3" >
+<t:button id="d_3b" actionListener="#{d.TaskDetailUI.onBack}" text="&#171; Lista" width="80" />
+<t:coldistance id="d_3c" width="100%" />
+<t:button id="d_3r" actionListener="#{d.TaskDetailUI.onRefresh}" text="Aggiorna" width="80" />
+<t:coldistance id="d_3d" width="8" />
+<t:button id="d_3l" actionListener="#{d.TaskDetailUI.onLogout}" text="Logout" width="80" />
+</t:rowheader>
+<t:rowdistance id="d_4" height="10" />
+<t:rowbodypane id="d_5" rendered="#{d.TaskDetailUI.loaded}" >
+<t:row id="d_6" >
+<t:scrollpane id="d_sp" height="100%" width="100%" >
+
+<!-- ===== Azioni sul proprio task ===== -->
+<t:row id="a_0" rendered="#{d.TaskDetailUI.canAct}" >
+<t:foldablepane id="a_fp" rowdistance="6" text="La tua attivita'" width="100%" >
+<t:row id="a_1" >
+<t:label id="a_1l" font="weight:bold" text="#{d.TaskDetailUI.taskLabel}" />
+</t:row>
+<t:row id="a_2" >
+<t:textarea id="a_2t" height="60" labeltext="Nota" text="#{d.TaskDetailUI.note}" width="100%" />
+</t:row>
+<t:row id="a_3" coldistance="8" rendered="#{d.TaskDetailUI.plainDecision}" >
+<t:button id="a_3ok" actionListener="#{d.TaskDetailUI.onApprove}" background="#C8E6C9" text="Approva" width="120" />
+<t:button id="a_3ko" actionListener="#{d.TaskDetailUI.onReject}" background="#FFCDD2" text="Respingi" width="120" />
+</t:row>
+<t:row id="a_4" coldistance="8" rendered="#{d.TaskDetailUI.hasOptions}" >
+<t:combobox id="a_4c" labeltext="Come proseguire" validvaluesbinding="#{d.TaskDetailUI.optionsVVB}" value="#{d.TaskDetailUI.option}" width="260" withnullitem="true" />
+<t:button id="a_4b" actionListener="#{d.TaskDetailUI.onChoose}" text="Conferma scelta" width="140" />
+</t:row>
+<t:row id="a_5" coldistance="8" >
+<t:combobox id="a_5c" labeltext="Sposta a" validvaluesbinding="#{d.TaskDetailUI.usersVVB}" value="#{d.TaskDetailUI.moveTo}" width="260" withnullitem="true" />
+<t:button id="a_5b" actionListener="#{d.TaskDetailUI.onMove}" text="Sposta" width="100" />
+</t:row>
+<t:row id="a_6" coldistance="8" rendered="#{d.TaskDetailUI.hasFunctions}" >
+<t:combobox id="a_6c" labeltext="Funzioni" validvaluesbinding="#{d.TaskDetailUI.functionsVVB}" value="#{d.TaskDetailUI.function}" width="260" withnullitem="true" />
+<t:button id="a_6b" actionListener="#{d.TaskDetailUI.onRunFunction}" text="Esegui" width="100" />
+</t:row>
+</t:foldablepane>
+</t:row>
+<t:row id="a_9" rendered="#{d.TaskDetailUI.sapGuiOnly}" >
+<t:label id="a_9l" font="weight:bold" foreground="#B26A00" text="Questa attivita' si completa in SAP GUI." />
+</t:row>
+<t:rowdistance id="a_d" height="8" />
+
+<!-- ===== Documento ===== -->
+<t:row id="h_0" >
+<t:foldablepane id="h_fp" rowdistance="6" text="Documento" width="100%" >
+<t:row id="h_1" coldistance="8" >
+<t:combobox id="h_1c" validvaluesbinding="#{d.TaskDetailUI.sheetsVVB}" value="#{d.TaskDetailUI.sheet}" width="260" />
+<t:button id="h_1b" actionListener="#{d.TaskDetailUI.onOpenSheet}" text="Apri PDF" width="100" />
+<t:coldistance id="h_1d" width="20" />
+<t:button id="h_1s" actionListener="#{d.TaskDetailUI.onOpenSap}" rendered="#{d.TaskDetailUI.sapGui}" text="Apri in SAP" width="110" />
+</t:row>
+<t:row id="h_2" >
+<t:fixgrid id="h_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.header}" sbvisibleamount="14" width="100%" >
+<t:gridcol id="h_c1" text="Dato" width="200" >
+<t:label id="h_c1l" font="weight:bold" text=".{label}" />
+</t:gridcol>
+<t:gridcol id="h_c2" text="Valore" width="100%" >
+<t:label id="h_c2l" text=".{value}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:foldablepane>
+</t:row>
+<t:rowdistance id="h_d" height="8" />
+
+<!-- ===== Percorso ===== -->
+<t:row id="p_0" >
+<t:foldablepane id="p_fp" rowdistance="6" text="Percorso" width="100%" >
+<t:row id="p_1" >
+<t:fixgrid id="p_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.path}" sbvisibleamount="12" width="100%" >
+<t:gridcol id="p_c1" text="Stato" width="90" >
+<t:label id="p_c1l" align="center" background=".{stateColor}" text=".{state}" />
+</t:gridcol>
+<t:gridcol id="p_c2" text="Step" width="50" >
+<t:label id="p_c2l" align="right" text=".{step}" />
+</t:gridcol>
+<t:gridcol id="p_c3" text="Attivita'" width="280" >
+<t:label id="p_c3l" text=".{task}" />
+</t:gridcol>
+<t:gridcol id="p_c4" text="Chi" width="220" >
+<t:label id="p_c4l" text=".{who}" />
+</t:gridcol>
+<t:gridcol id="p_c5" text="Note" width="100%" >
+<t:label id="p_c5l" text=".{note}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:foldablepane>
+</t:row>
+<t:rowdistance id="p_d" height="8" />
+
+<!-- ===== Storico ===== -->
+<t:row id="s_0" >
+<t:foldablepane id="s_fp" rowdistance="6" text="Storico" width="100%" >
+<t:row id="s_1" >
+<t:fixgrid id="s_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.history}" sbvisibleamount="12" width="100%" >
+<t:gridcol id="s_c1" sortreference=".{whenSort}" text="Data" width="120" >
+<t:label id="s_c1l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="s_c2" text="Attivita'" width="260" >
+<t:label id="s_c2l" text=".{task}" />
+</t:gridcol>
+<t:gridcol id="s_c3" text="Esito" width="150" >
+<t:label id="s_c3l" text=".{outcome}" />
+</t:gridcol>
+<t:gridcol id="s_c4" text="Chi" width="220" >
+<t:label id="s_c4l" text=".{who}" />
+</t:gridcol>
+<t:gridcol id="s_c5" text="Nota" width="100%" >
+<t:label id="s_c5l" text=".{note}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:foldablepane>
+</t:row>
+<t:rowdistance id="s_d" height="8" />
+
+<!-- ===== Commenti ===== -->
+<t:row id="c_0" >
+<t:foldablepane id="c_fp" rowdistance="6" text="Commenti" width="100%" >
+<t:row id="c_1" >
+<t:fixgrid id="c_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.comments}" sbvisibleamount="10" width="100%" >
+<t:gridcol id="c_c1" text="Data" width="120" >
+<t:label id="c_c1l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="c_c2" text="Autore" width="180" >
+<t:label id="c_c2l" text=".{author}" />
+</t:gridcol>
+<t:gridcol id="c_c3" text="Commento" width="100%" >
+<t:label id="c_c3l" text=".{text}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="c_2" coldistance="8" >
+<t:textarea id="c_2t" height="50" text="#{d.TaskDetailUI.newComment}" width="100%" />
+<t:button id="c_2b" actionListener="#{d.TaskDetailUI.onAddComment}" text="Aggiungi" width="100" />
+</t:row>
+</t:foldablepane>
+</t:row>
+<t:rowdistance id="c_d" height="8" />
+
+<!-- ===== Allegati ===== -->
+<t:row id="f_0" >
+<t:foldablepane id="f_fp" rowdistance="6" text="Allegati" width="100%" >
+<t:row id="f_m" rendered="#{d.TaskDetailUI.attachmentsMessageVisible}" >
+<t:label id="f_ml" foreground="#B00020" text="#{d.TaskDetailUI.attachmentsMessage}" />
+</t:row>
+<t:row id="f_1" >
+<t:fixgrid id="f_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.attachments}" sbvisibleamount="8" width="100%" >
+<t:gridcol id="f_c1" text="File" width="100%" >
+<t:label id="f_c1l" text=".{name}" />
+</t:gridcol>
+<t:gridcol id="f_c2" text="Dim." width="80" >
+<t:label id="f_c2l" align="right" text=".{size}" />
+</t:gridcol>
+<t:gridcol id="f_c3" text="Caricato da" width="160" >
+<t:label id="f_c3l" text=".{by}" />
+</t:gridcol>
+<t:gridcol id="f_c4" text="Il" width="120" >
+<t:label id="f_c4l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="f_c5" text="" width="90" >
+<t:button id="f_c5b" actionListener=".{onDownload}" text="Scarica" width="80" />
+</t:gridcol>
+<t:gridcol id="f_c6" text="" width="90" >
+<t:button id="f_c6b" actionListener=".{onDelete}" rendered=".{deletable}" text="Elimina" width="80" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="f_2" >
+<t:fileuploadbutton id="f_2u" actionListener="#{d.TaskDetailUI.onUpload}" maxfilesize="20000000" multiselect="true" text="Allega file..." width="160" />
+</t:row>
+</t:foldablepane>
+</t:row>
+
+</t:scrollpane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

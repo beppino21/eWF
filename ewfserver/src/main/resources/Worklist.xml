@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="w_1" beanbinding="#{d.WorklistUI}" />
+<t:rowtitlebar id="w_2" text="Attivita' da approvare" />
+<t:rowheader id="w_3" >
+<t:label id="w_3u" font="weight:bold" text="#{d.WorklistUI.userLabel}" />
+<t:coldistance id="w_3a" width="20" />
+<t:combobox id="w_3t" actionListener="#{d.WorklistUI.onFilter}" flush="true" validvaluesbinding="#{d.WorklistUI.typesVVB}" value="#{d.WorklistUI.type}" width="280" withnullitem="true" />
+<t:coldistance id="w_3b" width="8" />
+<t:field id="w_3s" actionListener="#{d.WorklistUI.onFilter}" flush="true" flushtimer="800" text="#{d.WorklistUI.text}" width="200" />
+<t:coldistance id="w_3c" width="8" />
+<t:link id="w_3r" actionListener="#{d.WorklistUI.onResetFilters}" text="Togli filtri" />
+<t:coldistance id="w_3d" width="100%" />
+<t:button id="w_3f" actionListener="#{d.WorklistUI.onRefresh}" text="Aggiorna" width="80" />
+<t:coldistance id="w_3e" width="8" />
+<t:button id="w_3l" actionListener="#{d.WorklistUI.onLogout}" text="Logout" width="80" />
+</t:rowheader>
+<t:rowdistance id="w_4" height="10" />
+<t:rowbodypane id="w_5" >
+<t:row id="w_6" >
+<t:label id="w_6l" font="weight:bold" text="#{d.WorklistUI.status}" />
+<t:coldistance id="w_6c" width="100%" />
+<t:link id="w_6x" actionListener="#{d.WorklistUI.grid.onEditColumnDetails}" text="Colonne..." />
+<t:coldistance id="w_6d" />
+<t:link id="w_6y" actionListener="#{d.WorklistUI.grid.onOpenGridExportFunctions}" text="Export" />
+</t:row>
+<t:row id="w_7" >
+<t:fixgrid id="w_g" height="100%" objectbinding="#{d.WorklistUI.grid}" persistid="EWF_WORKLIST_GRID" sbvisibleamount="30" width="100%" >
+<t:gridcol id="w_c0" sortreference=".{daysSort}" text="Giorni" width="60" >
+<t:label id="w_c0l" align="center" background=".{lightColor}" font="weight:bold" text=".{days}" />
+</t:gridcol>
+<t:gridcol id="w_c1" text="Processo" width="170" >
+<t:label id="w_c1l" text=".{processType}" />
+</t:gridcol>
+<t:gridcol id="w_c2" text="Documento" width="100" >
+<t:label id="w_c2l" font="weight:bold" text=".{document}" />
+</t:gridcol>
+<t:gridcol id="w_c3" rendered="#{d.WorklistUI.summaryVisible}" text="Riepilogo" width="340" >
+<t:label id="w_c3l" text=".{summary}" />
+</t:gridcol>
+<t:gridcol id="w_x1" rendered="#{d.WorklistUI.col1}" text="#{d.WorklistUI.colLabel1}" width="140" >
+<t:label id="w_x1l" text=".{col1}" />
+</t:gridcol>
+<t:gridcol id="w_x2" rendered="#{d.WorklistUI.col2}" text="#{d.WorklistUI.colLabel2}" width="140" >
+<t:label id="w_x2l" text=".{col2}" />
+</t:gridcol>
+<t:gridcol id="w_x3" rendered="#{d.WorklistUI.col3}" text="#{d.WorklistUI.colLabel3}" width="140" >
+<t:label id="w_x3l" text=".{col3}" />
+</t:gridcol>
+<t:gridcol id="w_x4" rendered="#{d.WorklistUI.col4}" text="#{d.WorklistUI.colLabel4}" width="140" >
+<t:label id="w_x4l" text=".{col4}" />
+</t:gridcol>
+<t:gridcol id="w_x5" rendered="#{d.WorklistUI.col5}" text="#{d.WorklistUI.colLabel5}" width="140" >
+<t:label id="w_x5l" text=".{col5}" />
+</t:gridcol>
+<t:gridcol id="w_x6" rendered="#{d.WorklistUI.col6}" text="#{d.WorklistUI.colLabel6}" width="140" >
+<t:label id="w_x6l" text=".{col6}" />
+</t:gridcol>
+<t:gridcol id="w_c4" text="Attivita'" width="220" >
+<t:label id="w_c4l" text=".{taskText}" />
+</t:gridcol>
+<t:gridcol id="w_c5" text="Per conto di" width="140" >
+<t:label id="w_c5l" background=".{forWhomBackground}" text=".{forWhom}" />
+</t:gridcol>
+<t:gridcol id="w_c6" text="Richiedente" width="140" >
+<t:label id="w_c6l" text=".{starter}" />
+</t:gridcol>
+<t:gridcol id="w_c7" sortreference=".{valueSort}" text="Valore" width="120" >
+<t:label id="w_c7l" align="right" text=".{value}" />
+</t:gridcol>
+<t:gridcol id="w_c8" sortreference=".{sinceSort}" text="In attesa dal" width="95" >
+<t:label id="w_c8l" text=".{since}" />
+</t:gridcol>
+<t:gridcol id="w_c9" text="" width="70" >
+<t:button id="w_c9b" actionListener=".{onOpen}" text="Apri" width="60" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

@@ -1,0 +1,156 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<groupId>it.eone.ewf</groupId>
+	<artifactId>ewfserver</artifactId>
+	<packaging>war</packaging>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>ewfserver Maven Webapp</name>
+	<url>http://maven.apache.org</url>
+    
+	<repositories>
+		<repository>
+			<id>org.eclnt</id>
+			<url>https://www.captaincasa.com/mavenrepository</url>
+		</repository>
+       <!-- Repository for dependent artifacts -->
+        <repository>
+            <id>mvnrepository.com</id>
+            <url>https://mvnrepository.com/repos/central</url>
+        </repository>
+		<repository>
+			<id>org.outerj</id>
+			<url>https://maven.atlassian.com/3rdparty/</url>
+		</repository>
+	</repositories>
+
+    
+    <properties>
+        <!-- This is the CaptainCasa version to be used. -->
+        <cc.version>20261019</cc.version>
+        <maven.compiler.release>21</maven.compiler.release>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    </properties>
+    
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.eclnt</groupId>
+                <artifactId>eclntjsfserver_jakarta-bom</artifactId>
+                <version>${cc.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+    
+    <dependencies>
+		<dependency>
+		    <groupId>org.eclnt</groupId>
+		    <artifactId>eclntjsfserverRISC_jakarta</artifactId>
+		    <version>${cc.version}</version>
+		</dependency>        
+		<!-- optional: addon pacakges -->
+		<!--
+		<dependency>
+		    <groupId>org.eclnt</groupId>
+		    <artifactId>eclntccee_jakarta</artifactId>
+		    <version>${cc.version}</version>
+		</dependency>        
+		<dependency>
+		    <groupId>org.eclnt</groupId>
+		    <artifactId>eclntpbc_jakarta</artifactId>
+		    <version>${cc.version}</version>
+		</dependency>        
+		-->
+		<!-- Servlet API: la fornisce Tomcat -->
+		<dependency>
+			<groupId>jakarta.servlet</groupId>
+			<artifactId>jakarta.servlet-api</artifactId>
+			<version>6.1.0</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- SAP JCo: il jar sta nella lib di Tomcat (sapjco3.jar + DLL nativa) -->
+		<dependency>
+			<groupId>com.sap</groupId>
+			<artifactId>sapjco3</artifactId>
+			<version>3.1.12</version>
+			<scope>provided</scope>
+		</dependency>
+		<!-- Driver PostgreSQL: nel WAR (WEB-INF/lib), caricato da EwfApp -->
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<version>42.7.4</version>
+		</dependency>
+		<!-- eWF: servizi (porta con se' ewf-engine) e connettore SAP -->
+		<dependency>
+			<groupId>it.eone.ewf</groupId>
+			<artifactId>ewf-service</artifactId>
+			<version>0.1.0-SNAPSHOT</version>
+		</dependency>
+		<dependency>
+			<groupId>it.eone.ewf</groupId>
+			<artifactId>ewf-sap</artifactId>
+			<version>0.1.0-SNAPSHOT</version>
+		</dependency>
+	</dependencies>
+    
+	<build>
+		<finalName>ewfserver</finalName>
+		<plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>3.3.1</version>
+            </plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<version>3.13.0</version>
+				<configuration>
+					<release>21</release>
+				</configuration>
+			</plugin>
+                        <!-- ************************************************************** -->
+            <!-- OPTIONAL COPYING OF TOOLSET                                    -->
+            <!-- Copies the tools for the version into /cctoolset-directory of  -->
+            <!-- project. You may then directly start it, e.g. by batch file:   -->
+            <!-- /projectdirectory                                              -->
+            <!--   /cctoolset                                                   -->
+            <!--     eclnteditor_springboot.war                                 --> 
+            <!--     start.bat                                                  -->
+            <!-- In start.bat:                                                  --> 
+            <!-- java -jar eclnteditor_springboot.war configDir=../cctoolsetconfig -->
+            <!-- ************************************************************** -->
+            <!--
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>cctoolset-copy</id>
+                        <phase>package</phase>
+                        <goals><goal>copy</goal></goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>org.eclnt</groupId>
+                                    <artifactId>eclnteditor_springboot</artifactId>
+                                    <version>${cc.version}</version>
+                                    <type>war</type>
+                                    <overWrite>true</overWrite>
+                                    <outputDirectory>${project.basedir}/cctoolset</outputDirectory>
+                                    <destFileName>eclnteditor_springboot_jakarta.war</destFileName>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            -->
+		</plugins>
+	</build>
+    
+</project>

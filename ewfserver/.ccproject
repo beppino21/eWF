@@ -1,0 +1,19 @@
+<project copywebapp="true"
+         javaclassdirectory="${project}/target/classes"
+         javasourcedirectory="${project}/src/main/java"
+         layoutdefinintionssavedasxml="true"
+         managedbycctoolset="false"
+         propertyFilesUTF8="true"
+         propertyfilesdirectory="${project}/src/main/resources"
+         reloadwebapp="true"
+         resourcesinsource="true"
+         resourcesinwebcontent="false"
+         webappaddonsdirectory="${project}/webcontentcc"
+         webcontentdeploydirectory="${deploytomcatwebappsdir}/${projectname}"
+         webcontentdirectory="${project}/src/main/webapp"
+         webcontextroot="${projectname}"
+         webhostport="localhost:${deploytomcatport}">
+    <deploycopyinfo fromdir="${project}/target/${projectname}"
+                    todir="${projectdeploy}"/>
+    <hotdeploymentpackage name="*"/>
+</project>

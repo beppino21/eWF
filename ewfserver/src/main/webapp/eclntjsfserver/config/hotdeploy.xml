@@ -1,0 +1,4 @@
+<hotdeploy>    
+    <webappdir name="/eclnthotdeploy/classes"/>    
+    <webappdir name="/eclnthotdeploy/lib"/>
+</hotdeploy>
