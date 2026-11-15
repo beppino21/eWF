@@ -1,0 +1,31 @@
+<system>
+    <riscstarter>
+        <allowstart page="/Outest.xml"/>
+    </riscstarter>
+    <sessionmanagement type="COOKIE"/>
+
+    <!--
+      Content-Security-Policy delle pagine .risc/.html (filtro CaptainCasa
+      HttpHeaderAttributesForPagesFilter). Sostituisce il default del framework
+      ("default-src 'self' data: 'unsafe-inline' 'unsafe-eval'; img-src * data:"):
+        - script solo dal server: niente 'unsafe-inline' né 'unsafe-eval'
+        - immagini solo dal server, niente plugin, <base> e form verso altri siti
+      Verificata il 23/10/2026 in modalità Report-Only su tutte le schermate.
+      Volutamente SENZA frame-ancestors: questo file è uguale in sviluppo e in
+      produzione, e frame-ancestors bloccherebbe l'anteprima del designer. In
+      produzione la protezione dall'incorniciamento la danno X-Frame-Options
+      (CaptainCasa) e il filtro applicativo SecurityHeadersFilter.
+      x-xss-protection="0": valore raccomandato oggi (OWASP) al posto di "1; mode=block".
+      Per tornare ai default del framework: eliminare questo elemento.
+    -->
+    <httpheaderattributesforpages
+        content-security-policy="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
+        x-xss-protection="0"
+        />
+
+    <!-- Errori di sistema: dettagli (stack trace, nomi interni) solo nel log,
+         all'utente un messaggio generico (guida sicurezza CaptainCasa). -->
+    <filterconfiguration
+        active="true"
+        classname="org.eclnt.jsfserver.util.ErrorAnonymizerFilter"/>
+</system>

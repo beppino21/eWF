@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="g_1" beanbinding="#{d.OutestUI}" >
+<t:clientconfig id="g_1cc" title="eWF" />
+</t:beanprocessing>
+<t:rowpagebeaninclude id="g_3" pagebeanbinding="#{d.OutestUI.contentUI}" shownullcontent="true" />
+
+</t:layoutdefinition>

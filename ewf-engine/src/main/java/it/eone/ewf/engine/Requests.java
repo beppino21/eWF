@@ -68,6 +68,17 @@ public final class Requests {
     /** Opzione proposta all'utente su un nodo di scelta. */
     public record OptionEntry(String code, String label, boolean reject, String startProcess, SpawnMode spawnMode) {}
 
+    /**
+     * Una tappa del percorso del processo, per il dettaglio a video.
+     * DONE: step concluso (who = chi ha agito, note = opzione scelta o "per conto di");
+     * CURRENT: task aperto; PLANNED: step previsto (who = assegnatario previsto, se determinabile oggi);
+     * CHOICE: qui si scegliera' come proseguire (options = etichette delle opzioni); oltre non e' determinato.
+     */
+    public record PathEntry(int stepNo, String taskText, String roleCode, String who, Kind kind, String note,
+                            List<String> options) {
+        public enum Kind { DONE, CURRENT, PLANNED, CHOICE }
+    }
+
     public record InboxEntry(long taskId, long processId, Reason reason) {
         public enum Reason { OWN, SUBSTITUTE, TEAM }
     }

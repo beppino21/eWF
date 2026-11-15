@@ -770,9 +770,11 @@ public final class WorkflowEngine {
             }
             String why = relevantChange(p, doc.get(), pt.changeTolerancePct());
             if (why == null) {
+                boolean refreshed = refreshContext(p, doc.get());
                 auditTx("DOCUMENT_CHANGE_IGNORED", null, "SYSTEM", p.id, null,
-                        Map.of("tolerancePct", pt.changeTolerancePct().toPlainString()));
-                notes.add(p.id + ": modifica non rilevante");
+                        Map.of("tolerancePct", pt.changeTolerancePct().toPlainString(),
+                               "contextRefreshed", String.valueOf(refreshed)));
+                notes.add(p.id + ": modifica non rilevante" + (refreshed ? ", dati del documento aggiornati" : ""));
                 last = p.id;
             } else {
                 last = restartInternal(p, pt, null, "Documento modificato: " + why, doc).id;
@@ -780,6 +782,24 @@ public final class WorkflowEngine {
             }
         }
         return done(e, String.join("; ", notes), last);
+    }
+
+    /**
+     * Modifica non rilevante su un processo aperto: si aggiorna solo la fotografia descrittiva del documento
+     * (doc_context: fornitore, descrizioni, ...), cosi' lista e scheda mostrano i dati attuali. Valore e posizioni
+     * restano quelli approvati: servono al confronto per la prossima modifica e alle soglie.
+     * Nessun aggiornamento se la fotografia e' identica o se l'evento non ne porta una.
+     */
+    private boolean refreshContext(ProcessInstance p, DocumentInfo now) {
+        Map<String, String> ctx = now.context() == null ? Map.of() : now.context();
+        if (ctx.isEmpty() || ctx.equals(p.docContext)) return false;
+        tx.run(() -> {
+            store.lockProcess(p.id);
+            ProcessInstance cur = requireProcess(p.id);
+            cur.docContext = Map.copyOf(ctx);
+            store.updateProcess(cur);
+        });
+        return true;
     }
 
     /**
@@ -876,6 +896,87 @@ public final class WorkflowEngine {
         StepDef currentStep = v.stepDefOf(current.get().taskDefId);
         if (currentStep.isChoiceNode()) return List.of();      // il seguito dipende dall'opzione che verra' scelta
         return chain(p, v, currentStep.nextOk(), choicesOf(p.id).values(), store.stepStates(p.id));
+    }
+
+    /**
+     * Percorso del processo: step conclusi, task in corso, step previsti e, se lungo la strada c'e' un nodo di
+     * scelta, il segnaposto CHOICE con le opzioni (oltre, il percorso dipende dalla scelta e non si mostra).
+     * Gli step saltati o non dovuti per importo non compaiono; i task nascosti (preview HIDDEN) neanche fra i previsti.
+     */
+    public List<PathEntry> path(long processId) {
+        ProcessInstance p = requireProcess(processId);
+        ProcessVersion v = defs.version(p.versionId);
+        List<TaskInstance> tasks = new ArrayList<>(store.tasksOf(p.id));
+        tasks.sort(Comparator.comparingLong(t -> t.id));
+        Map<Integer, String> chosen = choicesOf(p.id);
+        List<PathEntry> out = new ArrayList<>();
+
+        // conclusi: per ogni step l'ultimo esito positivo, nell'ordine in cui sono stati chiusi
+        Map<Integer, TaskInstance> lastByStep = new LinkedHashMap<>();
+        for (TaskInstance t : tasks) lastByStep.put(t.stepNo, t);
+        List<TaskInstance> done = lastByStep.values().stream()
+                .filter(t -> t.status == TaskStatus.OK)
+                .sorted(Comparator.comparing((TaskInstance t) -> t.closedAt == null ? Instant.MAX : t.closedAt)
+                        .thenComparingLong(t -> t.id))
+                .toList();
+        for (TaskInstance t : done) {
+            TaskDef td = v.task(t.taskDefId);
+            String note = t.optionCode == null ? null : td.option(t.optionCode).map(OptionDef::label).orElse(t.optionCode);
+            if (t.actedAsSubstitute && t.assigneeId != null)
+                note = (note == null ? "" : note + "; ") + "per conto di " + nameOf(t.assigneeId);
+            out.add(new PathEntry(t.stepNo, td.text(), td.roleCode(), nameOf(t.actedById), PathEntry.Kind.DONE, note, List.of()));
+        }
+
+        if (p.status != ProcessStatus.RUNNING) return out;
+        List<TaskInstance> open = tasks.stream().filter(TaskInstance::isOpen).toList();
+        for (TaskInstance t : open) {
+            TaskDef td = v.task(t.taskDefId);
+            String who = t.assigneeId != null ? nameOf(t.assigneeId)
+                    : t.claimedById != null ? nameOf(t.claimedById) : "Team " + t.teamCode;
+            out.add(new PathEntry(t.stepNo, td.text(), td.roleCode(), who, PathEntry.Kind.CURRENT, null, List.of()));
+        }
+        Optional<TaskInstance> current = open.stream().min(Comparator.comparingInt(t -> t.stepNo));
+        if (current.isEmpty()) return out;
+        StepDef currentStep = v.stepDefOf(current.get().taskDefId);
+        if (currentStep.isChoiceNode()) {
+            out.add(choiceEntry(currentStep));
+            return out;
+        }
+        Map<Integer, StepState> states = store.stepStates(p.id);
+        Set<Integer> seen = new HashSet<>();
+        Integer n = currentStep.nextOk();
+        while (n != null && seen.add(n)) {
+            StepDef s = v.resolve(n, chosen.values()).orElse(null);
+            if (s == null) break;
+            StepState st = states.get(n);
+            if ((st != null && st.skipped()) || belowMinimum(p.value, s.minAmount())) {
+                n = s.nextOk();
+                continue;
+            }
+            for (TaskDef td : s.tasks()) {
+                if (td.previewMode() == PreviewMode.HIDDEN) continue;
+                PreviewEntry e = td.previewMode() == PreviewMode.NAME ? previewName(p, n, td)
+                        : new PreviewEntry(n, td.text(), td.roleCode(), null, null);
+                out.add(new PathEntry(n, e.taskText(), e.roleCode(), e.assignee(), PathEntry.Kind.PLANNED, e.note(), List.of()));
+            }
+            if (s.isChoiceNode()) {
+                out.add(choiceEntry(s));
+                break;
+            }
+            n = s.nextOk();
+        }
+        return out;
+    }
+
+    private static PathEntry choiceEntry(StepDef s) {
+        List<String> labels = s.tasks().stream().flatMap(td -> td.options().stream()).map(OptionDef::label)
+                .distinct().toList();
+        return new PathEntry(s.stepNo(), "Scelta del percorso", null, null, PathEntry.Kind.CHOICE,
+                "il seguito dipende dall'opzione scelta", labels);
+    }
+
+    private String nameOf(Long userId) {
+        return userId == null ? null : users.byId(userId).map(User::displayName).orElse("#" + userId);
     }
 
     /** Percorso di approvazione previsto a partire dallo step "from" (incluso). */

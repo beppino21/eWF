@@ -48,6 +48,7 @@ import java.util.Arrays;
  *   posta                                 ultime mail in coda di uscita, con esito
  *   esegui &lt;codice job&gt;                    fa partire un job al prossimo giro del servizio (es. EWF_MAIL_DIGEST)
  *   mailprova &lt;indirizzo&gt;                  invio diretto di prova: verifica la configurazione EONE_SMTP_*
+ *   scheda &lt;ebeln&gt;                         "Scheda OdA" letta da SAP (BAPI_PO_GETDETAIL1), PDF nella cartella temporanea
  * Mail: EONE_SMTP_HOST, _PORT, _SECURITY, _AUTH, _USER, _PASSWORD, _FROM, (OAuth2) _OAUTH_TENANT, _OAUTH_CLIENT_ID,
  *   _OAUTH_CLIENT_SECRET. Senza EONE_SMTP_HOST il servizio accoda le mail ma non le spedisce.
  *
@@ -95,7 +96,8 @@ public final class OdaProbe {
                       avviso  <processo> <step> IMMEDIATE|NONE
                       posta
                       esegui  <codice job>
-                      mailprova <indirizzo>""");
+                      mailprova <indirizzo>
+                      scheda  <ebeln>""");
             return;
         }
         OdaProbe p = new OdaProbe();
@@ -165,6 +167,7 @@ public final class OdaProbe {
                     System.out.println("Job " + args[1] + " in partenza al prossimo giro del servizio (entro pochi secondi)");
                 }
                 case "mailprova" -> p.mailTest(args[1]);
+                case "scheda" -> { need(args, 2); p.sheet(args[1]); }
                 default -> System.out.println("Comando sconosciuto: " + args[0]);
             }
         } catch (EngineException e) {
@@ -355,6 +358,40 @@ public final class OdaProbe {
     }
 
     private static String nz(String s) { return s == null ? "" : s; }
+
+    /**
+     * Scheda OdA dal SAP vero, senza la parte eWF: serve a verificare la lettura via BAPI.
+     * Le descrizioni (sap.*_TXT) vengono dalla fotografia dell'ultimo processo eWF di quell'OdA, come nell'app.
+     */
+    private void sheet(String ebeln) throws Exception {
+        java.util.Map<String, String> ctx = new java.util.HashMap<>();
+        Long processId = new JdbcTransactions(ds).with(c -> {
+            try (var ps = c.prepareStatement("""
+                    SELECT p.id, e.key, e.value
+                      FROM ewf_core.process_instance p
+                      LEFT JOIN LATERAL jsonb_each_text(p.doc_context) e ON true
+                     WHERE p.id = (SELECT max(id) FROM ewf_core.process_instance
+                                    WHERE doc_type = 'F' AND document_key = ?)""")) {
+                ps.setString(1, ebeln);
+                Long id = null;
+                try (var rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        id = rs.getLong(1);
+                        if (rs.getString(2) != null) ctx.put(rs.getString(2), rs.getString(3));
+                    }
+                }
+                return id;
+            }
+        });
+        System.out.println(processId == null ? "Nessun processo eWF per l'OdA: solo i codici."
+                : "Descrizioni dal processo " + processId + ": " + ctx.keySet().stream().filter(k -> k.endsWith("_TXT")).sorted().toList());
+        it.eone.ewf.service.sheet.DocumentSheet s = it.eone.ewf.sap.sheet.SapDocumentSheets.forDestination(dest)
+                .build(new it.eone.ewf.service.spi.DocRef(null, "F", ebeln), it.eone.ewf.sap.sheet.SapDocumentSheets.PO_VIEW, ctx);
+        byte[] pdf = new it.eone.ewf.service.sheet.SheetPdf(java.time.ZoneId.of("Europe/Rome")).render(s, java.time.Instant.now());
+        java.nio.file.Path out = java.nio.file.Path.of(System.getProperty("java.io.tmpdir"), "scheda_oda_" + ebeln + ".pdf");
+        java.nio.file.Files.write(out, pdf);
+        System.out.println("Scheda salvata in " + out.toAbsolutePath());
+    }
 
     private static void need(String[] args, int n) {
         if (args.length < n) throw new IllegalArgumentException("Argomenti insufficienti per " + args[0]);

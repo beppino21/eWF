@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="g_1" beanbinding="#{d.LogonUI}" />
+<t:rowdistance id="g_top" height="100%" />
+<t:row id="g_r" >
+<t:coldistance id="g_l" width="100%" />
+<t:foldablepane id="g_fp" enabled="false" rowdistance="5" text="eWF - Approvazioni" width="340" >
+
+<t:row id="g_nt" rendered="#{d.LogonUI.noticeVisible}" >
+<t:textpane id="g_nt_t" font="weight:bold" foreground="#1565C0" text="#{d.LogonUI.notice}" width="300" />
+</t:row>
+<t:rowdistance id="g_nt_d" height="10" rendered="#{d.LogonUI.noticeVisible}" />
+
+<!-- ===== Utente e password ===== -->
+<t:row id="g_u" rendered="#{d.LogonUI.stepPassword}" >
+<t:field id="g_u_f" labeltext="Utente" requestfocus="creation" text="#{d.LogonUI.userName}" width="200" />
+</t:row>
+<t:row id="g_p" rendered="#{d.LogonUI.stepPassword}" >
+<t:password id="g_p_f" labeltext="Password" text="#{d.LogonUI.password}" width="200" />
+</t:row>
+<t:rowdistance id="g_b_d" height="20" rendered="#{d.LogonUI.stepPassword}" />
+<t:row id="g_b" rendered="#{d.LogonUI.stepPassword}" >
+<t:button id="g_b_b" actionListener="#{d.LogonUI.onLogon}" hotkey="10" text="Accedi" width="100+" />
+</t:row>
+<t:rowdistance id="g_c_d" height="20" rendered="#{d.LogonUI.stepPassword}" />
+<t:row id="g_c" rendered="#{d.LogonUI.stepPassword}" >
+<t:link id="g_c_l" actionListener="#{d.LogonUI.onRequestChange}" font="size:10" text="Cambia password..." />
+</t:row>
+
+<!-- ===== Cambio password (obbligatorio per la provvisoria, o volontario) ===== -->
+<t:row id="g_x0" rendered="#{d.LogonUI.stepChange}" >
+<t:label id="g_x0_l" font="weight:bold" text="#{d.LogonUI.changeTitle}" />
+</t:row>
+<t:row id="g_x1" rendered="#{d.LogonUI.stepChange}" >
+<t:field id="g_x1_f" enabled="#{d.LogonUI.userEditable}" labeltext="Utente" text="#{d.LogonUI.userName}" width="200" />
+</t:row>
+<t:row id="g_x2" rendered="#{d.LogonUI.stepChange}" >
+<t:password id="g_x2_f" labeltext="Password attuale" requestfocus="creation" text="#{d.LogonUI.currentPassword}" width="200" />
+</t:row>
+<t:row id="g_x3" rendered="#{d.LogonUI.stepChange}" >
+<t:password id="g_x3_f" labeltext="Nuova password" text="#{d.LogonUI.newPassword}" width="200" />
+</t:row>
+<t:row id="g_x4" rendered="#{d.LogonUI.stepChange}" >
+<t:password id="g_x4_f" labeltext="Conferma" text="#{d.LogonUI.confirmPassword}" width="200" />
+</t:row>
+<t:row id="g_x5" rendered="#{d.LogonUI.stepChange}" >
+<t:textpane id="g_x5_t" font="size:10" foreground="#777777" text="#{d.LogonUI.rules}" width="300" />
+</t:row>
+<t:rowdistance id="g_x6" height="12" rendered="#{d.LogonUI.stepChange}" />
+<t:row id="g_x7" coldistance="8" rendered="#{d.LogonUI.stepChange}" >
+<t:button id="g_x7_ok" actionListener="#{d.LogonUI.onChangePassword}" hotkey="10" text="Cambia password" width="140+" />
+<t:button id="g_x7_an" actionListener="#{d.LogonUI.onCancelChange}" text="Annulla" width="80" />
+</t:row>
+
+</t:foldablepane>
+<t:coldistance id="g_rr" width="100%" />
+</t:row>
+<t:rowdistance id="g_bot" height="100%" />
+
+</t:layoutdefinition>

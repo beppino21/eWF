@@ -694,6 +694,57 @@ abstract class WorkflowEngineContract {
     }
 
     @Test
+    void percorsoMostraFattoInCorsoESceltaPoiNullaOltre() {
+        ProcessInstance p = f.startRami("R-PATH");
+        List<Requests.PathEntry> start = f.engine.path(p.id);
+        assertEquals(List.of(Requests.PathEntry.Kind.CURRENT, Requests.PathEntry.Kind.PLANNED, Requests.PathEntry.Kind.CHOICE),
+                start.stream().map(Requests.PathEntry::kind).toList(), "richiesta in corso, decisione prevista, poi scelta");
+        assertEquals(List.of("Ramo A", "Ramo B", "Respingi"), start.get(2).options());
+
+        TaskInstance n = node(p);                                 // 10 OK, ora sul nodo
+        List<Requests.PathEntry> onNode = f.engine.path(p.id);
+        assertEquals(Requests.PathEntry.Kind.DONE, onNode.get(0).kind());
+        assertEquals("Mario Rossi", onNode.get(0).who());
+        assertEquals(Requests.PathEntry.Kind.CURRENT, onNode.get(1).kind());
+        assertEquals("Anna Bianchi", onNode.get(1).who());
+        assertEquals(Requests.PathEntry.Kind.CHOICE, onNode.get(2).kind());
+        assertEquals(3, onNode.size(), "oltre il nodo non si mostra nulla");
+
+        f.choose(n.id, BIANCHI, "B");
+        List<Requests.PathEntry> afterB = f.engine.path(p.id);
+        assertEquals("Ramo B", afterB.get(1).note(), "lo step concluso riporta l'opzione scelta");
+        assertEquals(List.of(10, 20, 30, 40, 50), afterB.stream().map(Requests.PathEntry::stepNo).toList(),
+                "dopo la scelta il percorso del ramo B e' noto fino alla fine");
+        assertEquals(Requests.PathEntry.Kind.CURRENT, afterB.get(2).kind());
+        assertEquals("Verifica B", afterB.get(3).taskText());
+    }
+
+    @Test
+    void percorsoDiUnProcessoConclusoSoloStepFatti() {
+        ProcessInstance p = f.startRami("R-PATH2");
+        f.choose(node(p).id, BIANCHI, "A");
+        f.ok(f.openTask(p.id).id, VERDI);                       // 30/A
+        f.ok(f.openTask(p.id).id, ROSSI);                       // 50
+        assertEquals(ProcessStatus.COMPLETED, f.status(p.id));
+        List<Requests.PathEntry> path = f.engine.path(p.id);
+        assertEquals(List.of(10, 20, 30, 50), path.stream().map(Requests.PathEntry::stepNo).toList());
+        assertTrue(path.stream().allMatch(e -> e.kind() == Requests.PathEntry.Kind.DONE));
+        assertEquals("Lavorazione A", path.get(2).taskText(), "la variante effettivamente percorsa");
+    }
+
+    @Test
+    void percorsoDopoUnRifiutoNelRamoNonMostraLoStepRifiutato() {
+        ProcessInstance p = f.startRami("R-PATH3");
+        f.choose(node(p).id, BIANCHI, "B");
+        f.ko(f.openTask(p.id).id, NERI, "rivedere");              // 30/B rifiuta: torna al nodo
+        List<Requests.PathEntry> path = f.engine.path(p.id);
+        assertEquals(List.of(10, 20, 20), path.stream().map(Requests.PathEntry::stepNo).toList(),
+                "richiesta fatta, nodo di nuovo in corso, poi la scelta");
+        assertEquals(Requests.PathEntry.Kind.CURRENT, path.get(1).kind());
+        assertEquals(Requests.PathEntry.Kind.CHOICE, path.get(2).kind());
+    }
+
+    @Test
     void anteprimaDelleOpzioniSenzaAvviareNulla() {
         ProcessInstance avvio = f.startAvvio("4500000706", "60000");
         TaskInstance node = f.openTask(avvio.id);
@@ -903,6 +954,33 @@ abstract class WorkflowEngineContract {
         assertEquals(ProcessStatus.CANCELLED, f.status(p.id));
         ProcessInstance n = theOpen("4500000821");
         assertEquals(0, new java.math.BigDecimal("1200").compareTo(n.value.amount()), "il riavvio usa la nuova fotografia");
+    }
+
+    @Test
+    void toccatoNonRilevanteAggiornaSoloLaFotografiaDescrittiva() {
+        startRules();
+        touched("4500000830", true, photo("1000", Map.of("sap.ZTERM", "B030", "plant", "D030"), item("00010", "10", "1000")));
+        ProcessInstance p = theOpen("4500000830");
+        int version = f.store.process(p.id).orElseThrow().rowVersion;
+
+        Requests.EventResult r = touched("4500000830", false,
+                photo("1000", Map.of("sap.ZTERM", "B060", "sap.ZTERM_TXT", "Bonifico 60 gg", "plant", "D030"),
+                        item("00010", "10", "1000")));                       // cambiano solo le condizioni
+        assertTrue(r.message().contains("dati del documento aggiornati"), r.message());
+        ProcessInstance after = f.store.process(p.id).orElseThrow();
+        assertEquals(p.id, theOpen("4500000830").id, "nessuna ripartenza");
+        assertEquals("B060", after.docContext.get("sap.ZTERM"), "condizione di pagamento attuale");
+        assertEquals("Bonifico 60 gg", after.docContext.get("sap.ZTERM_TXT"));
+        assertEquals(0, new java.math.BigDecimal("1000").compareTo(after.value.amount()), "il valore resta quello approvato");
+        assertEquals(List.of(item("00010", "10", "1000")), after.docItems, "le posizioni restano quelle di riferimento");
+
+        int v2 = after.rowVersion;
+        Requests.EventResult same = touched("4500000830", false,
+                photo("1000", Map.of("sap.ZTERM", "B060", "sap.ZTERM_TXT", "Bonifico 60 gg", "plant", "D030"),
+                        item("00010", "10", "1000")));
+        assertFalse(same.message().contains("aggiornati"), "fotografia identica: niente scrittura");
+        assertEquals(v2, f.store.process(p.id).orElseThrow().rowVersion);
+        assertTrue(v2 > version);
     }
 
     @Test

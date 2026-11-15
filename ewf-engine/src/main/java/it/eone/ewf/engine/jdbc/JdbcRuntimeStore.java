@@ -73,7 +73,7 @@ public final class JdbcRuntimeStore implements RuntimeStore {
             try (PreparedStatement ps = c.prepareStatement("""
                     UPDATE ewf_core.process_instance
                        SET status = ?, status_reason = ?, currency = ?, net_value = ?, ended_at = ?, ended_by = ?,
-                           row_version = row_version + 1
+                           doc_context = ?::jsonb, row_version = row_version + 1
                      WHERE id = ? AND row_version = ?""")) {
                 ps.setString(1, p.status.name());
                 ps.setString(2, p.statusReason);
@@ -81,8 +81,9 @@ public final class JdbcRuntimeStore implements RuntimeStore {
                 Sql.setBigDecimal(ps, 4, p.value == null ? null : p.value.amount());
                 Sql.setInstant(ps, 5, p.endedAt);
                 Sql.setLong(ps, 6, p.endedBy);
-                ps.setLong(7, p.id);
-                ps.setInt(8, p.rowVersion);
+                ps.setString(7, Sql.json(p.docContext));
+                ps.setLong(8, p.id);
+                ps.setInt(9, p.rowVersion);
                 return ps.executeUpdate();
             }
         });

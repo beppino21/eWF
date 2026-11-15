@@ -196,3 +196,22 @@ Messa in servizio:
 4. avviso immediato dove serve: `avviso EONE_ODA 20 IMMEDIATE`;
 5. variabili `EONE_SMTP_*` (vedi README di eone-connect), prova con `mailprova <tuo indirizzo>`;
 6. `servizio`, poi `posta` e `lavori`.
+
+## Schede documento (vista «Scheda OdA»)
+
+`sheet.SapDocumentSheets` implementa `DocumentSheets` di ewf-service per SAP on-premise (R/3, S/4HANA on-premise e
+Private). Per l'OdA (tipo documento `F`) legge, solo con funzioni standard o già di eWF:
+
+| Funzione | Per cosa | Se manca o fallisce |
+|---|---|---|
+| `BAPI_PO_GETDETAIL1` | testata, posizioni, testi, imputazioni, date di consegna | errore: la scheda non esce |
+| `/EWF/DOC_INFO` | valore netto per posizione | valore calcolato da quantità × prezzo (solo se l'unità di prezzo coincide) |
+| `BAPI_VENDOR_GETDETAIL` | indirizzo e telefono del fornitore | si usa il nome salvato da eWF (`sap.LIFNR_TXT`) |
+| `BAPI_COMPANYCODE_GETDETAIL` | nome della società | resta il codice |
+
+Le chiamate passano da `sheet.Rfc` (risultati come testi): la costruzione della scheda (`PoSheet`) si prova con dati
+finti (`PoSheetTest`), la chiamata vera è `JcoRfc`. Un campo assente nel rilascio SAP vale vuoto, non va in errore.
+
+Prova sul sistema vero: `OdaProbe scheda <ebeln>` salva il PDF nella cartella temporanea.
+
+Ordine di build: ewf-engine → ewf-service → ewf-sap (ewf-sap ora dipende da ewf-service).
