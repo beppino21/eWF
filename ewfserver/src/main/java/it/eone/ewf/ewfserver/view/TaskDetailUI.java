@@ -325,6 +325,25 @@ public class TaskDetailUI extends PageBean implements Serializable {
     public boolean isSapGui() { return m_detail != null && m_detail.links().sapGui(); }
     public boolean isAttachmentsMessageVisible() { return m_attachmentsMessage != null; }
 
+    /** I pulsanti delle schede stanno in "La tua attivita'"; nel riquadro Documento solo se non c'e' un'attivita'. */
+    public boolean isSheetsInDocument() { return !isCanAct(); }
+
+    // Titoli dei riquadri con il numero di elementi, cosi' si vede se vale la pena aprirli anche quando sono chiusi.
+    public String getPathTitle() { return paneTitle("Percorso", m_path.getItems().size()); }
+    public String getHistoryTitle() { return paneTitle("Storico", m_history.getItems().size()); }
+    public String getCommentsTitle() { return paneTitle("Commenti", m_comments.getItems().size()); }
+    public String getAttachmentsTitle() {
+        return m_attachmentsMessage != null ? "Allegati \u2014 non disponibili" : paneTitle("Allegati", m_attachments.getItems().size());
+    }
+    public String getPathColor() { return paneColor(m_path.getItems().size()); }
+    public String getHistoryColor() { return paneColor(m_history.getItems().size()); }
+    public String getCommentsColor() { return paneColor(m_comments.getItems().size()); }
+    public String getAttachmentsColor() { return m_attachmentsMessage != null ? "#B00020" : paneColor(m_attachments.getItems().size()); }
+
+    private static String paneTitle(String name, int n) { return n == 0 ? name + " \u2014 nessuno" : name + " (" + n + ")"; }
+    /** Grigio se vuoto, colore normale del tema altrimenti. */
+    private static String paneColor(int n) { return n == 0 ? "#9E9E9E" : null; }
+
     public String getTaskLabel() {
         MyTask t = myTask();
         if (t == null) return "";

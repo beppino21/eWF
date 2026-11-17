@@ -42,6 +42,16 @@
 <t:combobox id="a_6c" labeltext="Funzioni" validvaluesbinding="#{d.TaskDetailUI.functionsVVB}" value="#{d.TaskDetailUI.function}" width="260" withnullitem="true" />
 <t:button id="a_6b" actionListener="#{d.TaskDetailUI.onRunFunction}" text="Esegui" width="100" />
 </t:row>
+<t:rowdistance id="a_7d" height="6" />
+<t:row id="a_7" >
+<t:label id="a_7l" font="weight:bold" text="Visualizza documento" />
+</t:row>
+<t:row id="a_8" coldistance="8" >
+<t:combobox id="a_8c" validvaluesbinding="#{d.TaskDetailUI.sheetsVVB}" value="#{d.TaskDetailUI.sheet}" width="260" />
+<t:button id="a_8b" actionListener="#{d.TaskDetailUI.onOpenSheet}" text="Apri PDF" width="100" />
+<t:coldistance id="a_8d" width="20" />
+<t:button id="a_8s" actionListener="#{d.TaskDetailUI.onOpenSap}" rendered="#{d.TaskDetailUI.sapGui}" text="Apri in SAP" width="110" />
+</t:row>
 </t:foldablepane>
 </t:row>
 <t:row id="a_9" rendered="#{d.TaskDetailUI.sapGuiOnly}" >
@@ -51,8 +61,8 @@
 
 <!-- ===== Documento ===== -->
 <t:row id="h_0" >
-<t:foldablepane id="h_fp" rowdistance="6" text="Documento" width="100%" >
-<t:row id="h_1" coldistance="8" >
+<t:foldablepane id="h_fp" opened="false" rowdistance="6" text="Documento" width="100%" >
+<t:row id="h_1" coldistance="8" rendered="#{d.TaskDetailUI.sheetsInDocument}" >
 <t:combobox id="h_1c" validvaluesbinding="#{d.TaskDetailUI.sheetsVVB}" value="#{d.TaskDetailUI.sheet}" width="260" />
 <t:button id="h_1b" actionListener="#{d.TaskDetailUI.onOpenSheet}" text="Apri PDF" width="100" />
 <t:coldistance id="h_1d" width="20" />
@@ -74,7 +84,7 @@
 
 <!-- ===== Percorso ===== -->
 <t:row id="p_0" >
-<t:foldablepane id="p_fp" rowdistance="6" text="Percorso" width="100%" >
+<t:foldablepane id="p_fp" foreground="#{d.TaskDetailUI.pathColor}" opened="false" rowdistance="6" text="#{d.TaskDetailUI.pathTitle}" width="100%" >
 <t:row id="p_1" >
 <t:fixgrid id="p_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.path}" sbvisibleamount="12" width="100%" >
 <t:gridcol id="p_c1" text="Stato" width="90" >
@@ -100,7 +110,7 @@
 
 <!-- ===== Storico ===== -->
 <t:row id="s_0" >
-<t:foldablepane id="s_fp" rowdistance="6" text="Storico" width="100%" >
+<t:foldablepane id="s_fp" foreground="#{d.TaskDetailUI.historyColor}" opened="false" rowdistance="6" text="#{d.TaskDetailUI.historyTitle}" width="100%" >
 <t:row id="s_1" >
 <t:fixgrid id="s_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.history}" sbvisibleamount="12" width="100%" >
 <t:gridcol id="s_c1" sortreference=".{whenSort}" text="Data" width="120" >
@@ -124,33 +134,9 @@
 </t:row>
 <t:rowdistance id="s_d" height="8" />
 
-<!-- ===== Commenti ===== -->
-<t:row id="c_0" >
-<t:foldablepane id="c_fp" rowdistance="6" text="Commenti" width="100%" >
-<t:row id="c_1" >
-<t:fixgrid id="c_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.comments}" sbvisibleamount="10" width="100%" >
-<t:gridcol id="c_c1" text="Data" width="120" >
-<t:label id="c_c1l" text=".{when}" />
-</t:gridcol>
-<t:gridcol id="c_c2" text="Autore" width="180" >
-<t:label id="c_c2l" text=".{author}" />
-</t:gridcol>
-<t:gridcol id="c_c3" text="Commento" width="100%" >
-<t:label id="c_c3l" text=".{text}" />
-</t:gridcol>
-</t:fixgrid>
-</t:row>
-<t:row id="c_2" coldistance="8" >
-<t:textarea id="c_2t" height="50" text="#{d.TaskDetailUI.newComment}" width="100%" />
-<t:button id="c_2b" actionListener="#{d.TaskDetailUI.onAddComment}" text="Aggiungi" width="100" />
-</t:row>
-</t:foldablepane>
-</t:row>
-<t:rowdistance id="c_d" height="8" />
-
 <!-- ===== Allegati ===== -->
 <t:row id="f_0" >
-<t:foldablepane id="f_fp" rowdistance="6" text="Allegati" width="100%" >
+<t:foldablepane id="f_fp" foreground="#{d.TaskDetailUI.attachmentsColor}" opened="false" rowdistance="6" text="#{d.TaskDetailUI.attachmentsTitle}" width="100%" >
 <t:row id="f_m" rendered="#{d.TaskDetailUI.attachmentsMessageVisible}" >
 <t:label id="f_ml" foreground="#B00020" text="#{d.TaskDetailUI.attachmentsMessage}" />
 </t:row>
@@ -178,6 +164,30 @@
 </t:row>
 <t:row id="f_2" >
 <t:fileuploadbutton id="f_2u" actionListener="#{d.TaskDetailUI.onUpload}" maxfilesize="20000000" multiselect="true" text="Allega file..." width="160" />
+</t:row>
+</t:foldablepane>
+</t:row>
+<t:rowdistance id="f_d" height="8" />
+
+<!-- ===== Commenti ===== -->
+<t:row id="c_0" >
+<t:foldablepane id="c_fp" foreground="#{d.TaskDetailUI.commentsColor}" opened="false" rowdistance="6" text="#{d.TaskDetailUI.commentsTitle}" width="100%" >
+<t:row id="c_1" >
+<t:fixgrid id="c_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskDetailUI.comments}" sbvisibleamount="10" width="100%" >
+<t:gridcol id="c_c1" text="Data" width="120" >
+<t:label id="c_c1l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="c_c2" text="Autore" width="180" >
+<t:label id="c_c2l" text=".{author}" />
+</t:gridcol>
+<t:gridcol id="c_c3" text="Commento" width="100%" >
+<t:label id="c_c3l" text=".{text}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="c_2" coldistance="8" >
+<t:textarea id="c_2t" height="50" text="#{d.TaskDetailUI.newComment}" width="100%" />
+<t:button id="c_2b" actionListener="#{d.TaskDetailUI.onAddComment}" text="Aggiungi" width="100" />
 </t:row>
 </t:foldablepane>
 </t:row>
