@@ -33,6 +33,10 @@
   <listener>
     <listener-class>org.eclnt.jsfserver.util.CCServletContextListener</listener-class>
   </listener>
+  <!-- eWF: all'avvio crea i servizi e fa partire i job (coda degli avvii, notifiche, mail); alla chiusura li ferma. -->
+  <listener>
+    <listener-class>it.eone.ewf.ewfserver.app.JobHost</listener-class>
+  </listener>
   
   <!--
   PLEASE PAY ATTNETION: the registration of the CCServletContextListener in the web.xml

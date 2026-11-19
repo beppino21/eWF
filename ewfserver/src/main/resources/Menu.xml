@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="m_0" beanbinding="#{d.MenuUI}" />
+<t:rowtitlebar id="m_1" text="#{d.MenuUI.welcome}" />
+<t:rowheader id="m_1h" >
+<t:coldistance id="m_1h_cd" width="100%" />
+<t:button id="m_1h_logout" actionListener="#{d.MenuUI.onLogout}" text="Logout" width="80" />
+</t:rowheader>
+<t:rowdistance id="m_1h_d" height="10" />
+<t:rowbodypane id="m_2" padding="20" >
+<t:row id="m_3" >
+<t:label id="m_4" font="size:14;weight:bold;color:#555555" text="Cosa vuoi fare?" />
+</t:row>
+<t:rowdistance id="m_5" height="16" />
+<t:row id="m_6" >
+
+<!-- ===== Funzioni (card) ===== -->
+<t:fixgrid id="m_7" avoidrowstretching="true" dynamicheightsizing="true" height="100%" objectbinding="#{d.MenuUI.cards}" rowheight="106" sbvisibleamount="6" width="450" >
+<t:gridcol id="m_8" width="100%" >
+<t:pane id="m_9" actionListener=".{onSelect}" background="#FFFFFF" border="#CCCCCC" invokeevent="leftclick" padding="14" width="100%" >
+<t:row id="m_10" >
+<t:label id="m_11" font="size:13;weight:bold" text=".{title}" />
+</t:row>
+<t:rowdistance id="m_12" height="4" />
+<t:row id="m_13" >
+<t:label id="m_14" font="size:11" text=".{description}" width="400" />
+</t:row>
+<t:rowdistance id="m_14b_d" height="6" rendered=".{hasBadge}" />
+<t:row id="m_14b" rendered=".{hasBadge}" >
+<t:pane id="m_14b_pane" background="#C62828" padding="4" >
+<t:label id="m_14b_lbl" font="size:11;weight:bold;color:#FFFFFF" text=".{badgeLabel}" />
+</t:pane>
+</t:row>
+</t:pane>
+</t:gridcol>
+</t:fixgrid>
+<t:coldistance id="m_15" width="24" />
+
+<!-- ===== Sintesi delle attivita' in carico ===== -->
+<t:pane id="m_sum" actionListener="#{d.MenuUI.onOpenTasks}" border="#DDDDDD" invokeevent="leftclick" padding="16" rowalignmenty="top" width="320" >
+<t:row id="m_sum_t" >
+<t:label id="m_sum_tl" font="size:14;weight:bold;color:#1565C0" text="Attivita' in carico" />
+<t:coldistance id="m_sum_tc" width="100%" />
+<t:label id="m_sum_tot" align="right!" font="size:26;weight:bold;color:#1565C0" text="#{d.MenuUI.total}" />
+</t:row>
+<t:rowdistance id="m_sum_d0" height="14" />
+<t:row id="m_sum_grid_row" >
+<t:pane id="m_sum_badges" width="100%" >
+<t:repeat id="m_sum_rep" listbinding="#{d.MenuUI.summary}" >
+<t:row id="m_sum_rep_r" coldistance="8" >
+<t:label id="m_sum_rep_lbl" background=".{color}" font="size:20;weight:bold" text=".{label}" width="200" />
+<t:label id="m_sum_rep_cnt" align="right!" font="size:24;weight:bold" text=".{count}" width="50" />
+</t:row>
+<t:rowdistance id="m_sum_rep_d" height="5" />
+</t:repeat>
+<t:rowdistance id="m_sum_sost_d" height="9" rendered="#{d.MenuUI.hasSubstitutions}" />
+<t:row id="m_sum_sost_r" coldistance="8" rendered="#{d.MenuUI.hasSubstitutions}" >
+<t:label id="m_sum_sost_lbl" background="#FFF59D" font="size:20;weight:bold;color:#7A6A00" text="DA SOSTITUZIONI" width="200" />
+<t:label id="m_sum_sost_cnt" align="right!" font="size:24;weight:bold;color:#7A6A00" text="#{d.MenuUI.fromSubstitutions}" width="50" />
+</t:row>
+</t:pane>
+</t:row>
+</t:pane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

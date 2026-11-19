@@ -22,6 +22,7 @@ import java.util.Properties;
 public final class SapDestinations implements DestinationDataProvider {
 
     private static volatile boolean registered;
+    private static SapDestinations instance;
 
     private final Path configDir;
 
@@ -35,8 +36,26 @@ public final class SapDestinations implements DestinationDataProvider {
         String dir = System.getenv("EWF_SAP_CONFIG_DIR");
         if (dir == null || dir.isBlank())
             throw new IllegalStateException("Variabile EWF_SAP_CONFIG_DIR non impostata");
-        Environment.registerDestinationDataProvider(new SapDestinations(Path.of(dir)));
+        SapDestinations p = new SapDestinations(Path.of(dir));
+        Environment.registerDestinationDataProvider(p);
+        instance = p;
         registered = true;
+    }
+
+    /**
+     * Toglie il provider da JCo. Va chiamato quando l'applicazione si ferma: JCo sta nella lib di Tomcat ed e'
+     * condiviso da tutte le applicazioni, quindi senza questa chiamata il provider della vecchia istanza resta
+     * registrato e, al ricaricamento (redeploy/reload), la nuova istanza non riesce a registrare il suo
+     * ("DestinationDataProvider already registered") e parte senza SAP.
+     */
+    public static synchronized void unregister() {
+        if (instance == null) return;
+        try {
+            Environment.unregisterDestinationDataProvider(instance);
+        } finally {
+            instance = null;
+            registered = false;
+        }
     }
 
     @Override

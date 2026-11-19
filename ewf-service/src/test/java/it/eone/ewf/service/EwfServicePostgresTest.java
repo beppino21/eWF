@@ -135,6 +135,120 @@ public class EwfServicePostgresTest {
         return items.get(0);
     }
 
+    // ------------------------------------------------------------------ gantt
+
+    @Test
+    void lineaDelTempoConAvvioTaskChiusiEAperti() {
+        long p = atApproval("4500009003");                 // step 10 approvato, step 20 aperto per BIANCHI
+        List<TimelineBar> bars = svc.timeline(BIANCHI, p);
+        assertEquals("START", bars.get(0).status());
+        assertTrue(bars.size() >= 3, "avvio + almeno un task chiuso + quello aperto");
+        TimelineBar open = bars.get(bars.size() - 1);
+        assertEquals("OPEN", open.status());
+        assertNull(open.to(), "il task aperto non ha fine");
+        assertTrue(bars.stream().anyMatch(b -> "OK".equals(b.status()) && b.to() != null));
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> svc.timeline(NERI, p)).code(),
+                "stesse regole di visibilita' del dettaglio");
+    }
+
+    // ------------------------------------------------------------------ sostituzioni
+
+    SubstitutionService subst() { return new SubstitutionService(db, clock, ROME); }
+
+    @Test
+    void sostituzioneIndicataDallUtenteEUsataDalMotore() {
+        sql("UPDATE ewf_org.app_user SET can_substitute = true WHERE id = " + ROSSI);
+        LocalDate today = LocalDate.of(2026, 11, 6);
+        SubstitutionService.Substitution s = subst().add(ROSSI, BIANCHI, today, today.plusDays(5));
+        assertTrue(s.activeToday());
+        assertEquals("Anna Bianchi", s.substituteName());
+        assertEquals(1, subst().asSubstitute(BIANCHI).size(), "BIANCHI vede chi sta sostituendo");
+
+        start("4500009001");   // lo step 10 va a ROSSI: BIANCHI lo vede come sostituto
+        WorkItem w = svc.worklist(BIANCHI, WorklistFilter.all()).items().stream()
+                .filter(i -> "4500009001".equals(i.documentKey())).findFirst().orElseThrow();
+        assertEquals(Reason.SUBSTITUTE, w.reason());
+
+        ServiceException overlap = assertThrows(ServiceException.class,
+                () -> subst().add(ROSSI, NERI, today.plusDays(3), today.plusDays(9)));
+        assertEquals(Code.INVALID, overlap.code(), "periodi sovrapposti");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class,
+                () -> subst().add(ROSSI, NERI, today.minusDays(1), today)).code(), "niente periodi nel passato");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class,
+                () -> subst().add(ROSSI, ROSSI, today.plusDays(10), today.plusDays(11))).code());
+    }
+
+    @Test
+    void togliereUnaSostituzioneInCorsoLaChiudeAIeriUnaFuturaLaCancella() {
+        sql("UPDATE ewf_org.app_user SET can_substitute = true WHERE id = " + ROSSI);
+        LocalDate today = LocalDate.of(2026, 11, 6);
+        sql("INSERT INTO ewf_org.substitution (user_id, substitute_id, valid_from, valid_to) VALUES ("
+                + ROSSI + ", " + BIANCHI + ", DATE '2026-11-01', DATE '2026-11-10')");
+        SubstitutionService.Substitution future = subst().add(ROSSI, NERI, today.plusDays(20), today.plusDays(25));
+        long running = subst().mine(ROSSI).stream().filter(SubstitutionService.Substitution::activeToday).findFirst().orElseThrow().id();
+
+        subst().remove(ROSSI, running);
+        subst().remove(ROSSI, future.id());
+        assertTrue(subst().mine(ROSSI).isEmpty());
+        assertEquals("2026-11-05", value("SELECT valid_to::text FROM ewf_org.substitution WHERE id = " + running),
+                "la sostituzione in corso resta nello storico, chiusa a ieri");
+        assertEquals("0", value("SELECT count(*)::text FROM ewf_org.substitution WHERE id = " + future.id()));
+    }
+
+    @Test
+    void senzaPermessoNonSiGestisconoLeSostituzioni() {
+        assertFalse(subst().canManage(NERI));
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class,
+                () -> subst().add(NERI, BIANCHI, LocalDate.of(2026, 11, 7), LocalDate.of(2026, 11, 8))).code());
+        sql("UPDATE ewf_org.user_class SET can_substitute = true WHERE code = (SELECT user_class_code FROM ewf_org.app_user WHERE id = "
+                + NERI + ")");
+        sql("UPDATE ewf_org.app_user SET can_substitute = NULL WHERE id = " + NERI);
+        assertEquals(value("SELECT (user_class_code IS NOT NULL)::text FROM ewf_org.app_user WHERE id = " + NERI).equals("true"),
+                subst().canManage(NERI), "senza indicazione sull'utente vale la sua classe");
+    }
+
+    // ------------------------------------------------------------------ amministrazione
+
+    AdminService admin() { return new AdminService(engine, db, "WFADM", clock, ROME); }
+
+    @Test
+    void amministratoreEChiStaNelTeamDiRiserva() {
+        assertTrue(admin().isAdmin(VERDI));
+        assertFalse(admin().isAdmin(BIANCHI));
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> admin().processesInError(BIANCHI)).code());
+    }
+
+    @Test
+    void esitoIncertoInSapLAmministratoreConfermaEIlProcessoAvanza() {
+        sql("INSERT INTO ewf_core.handler (code, kind, contract, target) VALUES ('/T/INCERTO','JAVA','TASK_ACTION','x')");
+        sql("INSERT INTO ewf_core.task_hook (task_def_id, event, seq, handler_id)"
+                + " SELECT d.id, 'ON_OK', 1, h.id FROM ewf_core.task_def d, ewf_core.handler h"
+                + "  WHERE d.text = 'Approvazione responsabile' AND h.code = '/T/INCERTO'");
+        handlers.put("/T/INCERTO", ctx -> HandlerResult.unknown("timeout RFC"));
+        long p = atApproval("4500009002");
+
+        Requests.Outcome o = svc.approve(BIANCHI, onlyTask(BIANCHI).taskId(), null, null);
+        assertEquals(Requests.Outcome.Result.UNKNOWN, o.result());
+
+        List<AdminService.ProcessError> errors = admin().processesInError(VERDI);
+        assertEquals(1, errors.size());
+        AdminService.ProcessError e = errors.get(0);
+        assertEquals(p, e.processId());
+        assertEquals(AdminService.ErrorKind.UNKNOWN, e.kind());
+        assertEquals("/T/INCERTO", e.handler());
+        assertEquals("Approvazione responsabile", e.taskText());
+        assertNotNull(e.executionId());
+
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class,
+                () -> admin().resolveUnknown(VERDI, e.executionId(), true, " ")).code(), "la nota e' obbligatoria");
+        Requests.Outcome r = admin().resolveUnknown(VERDI, e.executionId(), true, "verificato in ME23N: rilasciato");
+        assertEquals(Requests.Outcome.Result.DONE, r.result());
+        assertTrue(admin().processesInError(VERDI).isEmpty());
+        assertEquals("RUNNING", value("SELECT status FROM ewf_core.process_instance WHERE id = " + p));
+        assertEquals("30", value("SELECT max(step_no)::text FROM ewf_core.task_instance WHERE process_id = " + p),
+                "confermato l'esito, il processo e' passato allo step successivo");
+    }
+
     // ------------------------------------------------------------------ login
 
     @Test
@@ -412,6 +526,14 @@ public class EwfServicePostgresTest {
         db.with(c -> {
             try (Statement st = c.createStatement()) {
                 return st.executeUpdate(s);
+            }
+        });
+    }
+
+    String value(String query) {
+        return db.with(c -> {
+            try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery(query)) {
+                return rs.next() ? rs.getString(1) : null;
             }
         });
     }

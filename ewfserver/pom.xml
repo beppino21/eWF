@@ -78,6 +78,12 @@
 			<version>3.1.12</version>
 			<scope>provided</scope>
 		</dependency>
+		<!-- Pool di connessioni al database -->
+		<dependency>
+			<groupId>com.zaxxer</groupId>
+			<artifactId>HikariCP</artifactId>
+			<version>6.2.1</version>
+		</dependency>
 		<!-- Driver PostgreSQL: nel WAR (WEB-INF/lib), caricato da EwfApp -->
 		<dependency>
 			<groupId>org.postgresql</groupId>

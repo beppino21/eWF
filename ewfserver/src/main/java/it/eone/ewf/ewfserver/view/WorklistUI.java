@@ -1,6 +1,7 @@
 package it.eone.ewf.ewfserver.view;
 
 import it.eone.ewf.ewfserver.app.EwfApp;
+import it.eone.ewf.ewfserver.app.JobHost;
 import it.eone.ewf.ewfserver.context.EwfSession;
 import it.eone.ewf.ewfserver.context.SessionGuard;
 import it.eone.ewf.service.EwfService;
@@ -14,6 +15,7 @@ import it.eone.ewf.service.Views.Worklist;
 import it.eone.ewf.service.Views.WorklistFilter;
 import org.eclnt.editor.annotations.CCGenClass;
 import org.eclnt.jsfserver.base.faces.event.ActionEvent;
+import org.eclnt.jsfserver.defaultscreens.ModalPopup;
 import org.eclnt.jsfserver.defaultscreens.Statusbar;
 import org.eclnt.jsfserver.elements.impl.FIXGRIDItem;
 import org.eclnt.jsfserver.elements.impl.FIXGRIDListBinding;
@@ -21,6 +23,7 @@ import org.eclnt.jsfserver.elements.util.ValidValuesBinding;
 import org.eclnt.jsfserver.pagebean.PageBean;
 
 import java.io.Serializable;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
@@ -38,6 +41,7 @@ public class WorklistUI extends PageBean implements Serializable {
     public interface IListener extends Serializable {
         void reactOnOpen(long processId);
         void reactOnLogout();
+        void reactOnMenu();
     }
 
     private IListener m_listener;
@@ -86,7 +90,23 @@ public class WorklistUI extends PageBean implements Serializable {
 
     // ------------------------------------------------------------------ azioni
 
-    public void onRefresh(ActionEvent ae) { reload(); }
+    /**
+     * "Aggiorna": prima fa leggere subito allo scheduler la coda degli avvii da SAP (gli OdA appena
+     * creati diventano processi), poi rilegge la lista. L'attesa e' di pochi secondi al massimo.
+     */
+    public void onBackToMenu(ActionEvent ae) {
+        if (m_listener != null) m_listener.reactOnMenu();
+    }
+
+    public void onRefresh(ActionEvent ae) {
+        JobHost.QueueRead r = JobHost.readStartQueueNow(Duration.ofSeconds(6));
+        reload();
+        switch (r) {
+            case FAILED -> Statusbar.outputWarning("Lettura dei nuovi documenti da SAP non riuscita: lista aggiornata con i dati gia' presenti.");
+            case STILL_RUNNING -> Statusbar.outputMessage("La lettura dei nuovi documenti da SAP e' ancora in corso: riaggiornare tra qualche secondo.");
+            default -> { }
+        }
+    }
     public void onFilter(ActionEvent ae) { reload(); }
 
     public void onResetFilters(ActionEvent ae) {
@@ -136,6 +156,15 @@ public class WorklistUI extends PageBean implements Serializable {
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
+    /** Storico, Gantt, Commenti e Allegati in una finestra sopra la lista, senza aprire il dettaglio. */
+    private void openInfo(WorkItem w, ProcessInfoUI.Mode mode) {
+        ProcessInfoUI ui = new ProcessInfoUI();
+        ui.prepare(w.processId(), mode, false);
+        openModalPopup(ui, w.processTypeText() + " " + w.documentKey(), 1000, 600, new ModalPopup.IModalPopupListener() {
+            @Override public void reactOnPopupClosedByUser() { closePopup(ui); }
+        });
+    }
+
     public class Item extends FIXGRIDItem implements Serializable {
         private static final long serialVersionUID = 1L;
         private final WorkItem w;
@@ -145,6 +174,10 @@ public class WorklistUI extends PageBean implements Serializable {
         @Override public void onRowExecute() {
             if (m_listener != null) m_listener.reactOnOpen(w.processId());
         }
+
+        public void onAttachments(ActionEvent ae) { openInfo(w, ProcessInfoUI.Mode.ATTACHMENTS); }
+        public void onHistory(ActionEvent ae) { openInfo(w, ProcessInfoUI.Mode.HISTORY); }
+        public void onComments(ActionEvent ae) { openInfo(w, ProcessInfoUI.Mode.COMMENTS); }
 
         public void onOpen(ActionEvent ae) { onRowExecute(); }
 

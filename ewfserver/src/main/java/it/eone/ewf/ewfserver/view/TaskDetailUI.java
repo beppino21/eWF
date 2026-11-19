@@ -306,6 +306,15 @@ public class TaskDetailUI extends PageBean implements Serializable {
 
     public void onBack(ActionEvent ae) { if (m_listener != null) m_listener.reactOnBack(); }
     public void onRefresh(ActionEvent ae) { load(); }
+
+    /** Gantt del processo: stessa finestra dei pulsanti in lista, aperta direttamente sul grafico. */
+    public void onGantt(ActionEvent ae) {
+        ProcessInfoUI ui = new ProcessInfoUI();
+        ui.prepare(m_processId, ProcessInfoUI.Mode.GANTT, false);
+        openModalPopup(ui, getTitle(), 1000, 600, new org.eclnt.jsfserver.defaultscreens.ModalPopup.IModalPopupListener() {
+            @Override public void reactOnPopupClosedByUser() { closePopup(ui); }
+        });
+    }
     public void onLogout(ActionEvent ae) { if (m_listener != null) m_listener.reactOnLogout(); }
 
     // ------------------------------------------------------------------ binding

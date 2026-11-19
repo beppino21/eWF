@@ -1,0 +1,46 @@
+# ============================================================
+# Configurazione eWF - file ESTERNO al WAR (sopravvive ai redeploy).
+# Percorso (il primo che esiste):
+#   - system property -Dewf.config.path=...
+#   - C:\eone\ewf\config.properties        (Windows)
+#   - /opt/eone/ewf/config.properties      (Linux)
+#
+# NIENTE PASSWORD IN QUESTO FILE: se ce ne sono vengono ignorate.
+# Vanno impostate come variabili d'ambiente di Tomcat (setenv o servizio):
+#   EWF_DB_PASSWORD, EWF_SAP_<DEST>_PASSWD, EONE_SMTP_PASSWORD
+# ============================================================
+
+# --- PostgreSQL ---
+EWF_DB_URL=jdbc:postgresql://localhost:5432/ewf
+EWF_DB_USER=ewf_app
+# Connessioni al massimo nel pool (default 15)
+EWF_DB_POOL_SIZE=15
+
+# --- SAP (vuoto = applicazione senza SAP: niente schede da SAP) ---
+EWF_SAP_DEST=EWF_DEV
+# La cartella dei file di destinazione JCo (<NOME>.properties, senza password) si indica,
+# come per la sonda, con la VARIABILE D'AMBIENTE EWF_SAP_CONFIG_DIR: ewf-sap la legge solo da li'.
+
+# --- Indirizzo pubblico, per i collegamenti nelle mail (senza / finale) ---
+EWF_APP_BASE_URL=https://server.dominio.it/ewfserver
+
+# --- Job (coda degli avvii, avvisi, riepilogo, invio mail) ---
+# false = questa istanza non esegue job (es. un secondo Tomcat di sviluppo sullo stesso database)
+EWF_JOBS_ENABLED=true
+
+# --- Posta in uscita (senza EONE_SMTP_HOST le mail restano in coda) ---
+# EONE_SMTP_HOST=smtp.dominio.it
+# EONE_SMTP_PORT=587
+# EONE_SMTP_USER=ewf@dominio.it
+# EONE_SMTP_FROM=ewf@dominio.it
+# (EONE_SMTP_PASSWORD solo come variabile d'ambiente)
+
+# --- Varie ---
+EWF_ZONE=Europe/Rome
+EWF_MAX_ATTACHMENT_MB=20
+
+# --- Sicurezza HTTP (SecurityHeadersFilter) ---
+# Solo in SVILUPPO: permette all'anteprima del designer (altra porta) di mostrare le pagine,
+# lasciando il filtro attivo. In produzione NON va impostato.
+# EWF_FRAME_ALLOWED=http://localhost:51000
+# Spegnimento completo (sconsigliato, meglio la riga sopra): EWF_SECURITY_HEADERS=false

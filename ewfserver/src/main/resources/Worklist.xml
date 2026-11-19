@@ -4,8 +4,8 @@
 <t:beanprocessing id="w_1" beanbinding="#{d.WorklistUI}" />
 <t:rowtitlebar id="w_2" text="Attivita' da approvare" />
 <t:rowheader id="w_3" >
-<t:label id="w_3u" font="weight:bold" text="#{d.WorklistUI.userLabel}" />
-<t:coldistance id="w_3a" width="20" />
+<t:button id="w_3m" actionListener="#{d.WorklistUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="w_3md" width="12" />
 <t:combobox id="w_3t" actionListener="#{d.WorklistUI.onFilter}" flush="true" validvaluesbinding="#{d.WorklistUI.typesVVB}" value="#{d.WorklistUI.type}" width="280" withnullitem="true" />
 <t:coldistance id="w_3b" width="8" />
 <t:field id="w_3s" actionListener="#{d.WorklistUI.onFilter}" flush="true" flushtimer="800" text="#{d.WorklistUI.text}" width="200" />
@@ -13,8 +13,6 @@
 <t:link id="w_3r" actionListener="#{d.WorklistUI.onResetFilters}" text="Togli filtri" />
 <t:coldistance id="w_3d" width="100%" />
 <t:button id="w_3f" actionListener="#{d.WorklistUI.onRefresh}" text="Aggiorna" width="80" />
-<t:coldistance id="w_3e" width="8" />
-<t:button id="w_3l" actionListener="#{d.WorklistUI.onLogout}" text="Logout" width="80" />
 </t:rowheader>
 <t:rowdistance id="w_4" height="10" />
 <t:rowbodypane id="w_5" >
@@ -35,6 +33,15 @@
 </t:gridcol>
 <t:gridcol id="w_c2" text="Documento" width="100" >
 <t:label id="w_c2l" font="weight:bold" text=".{document}" />
+</t:gridcol>
+<t:gridcol id="w_cb" text="" width="250" >
+<t:pane id="w_cbp" width="100%" >
+<t:row id="w_cbr" coldistance="4" >
+<t:button id="w_cb1" actionListener=".{onAttachments}" font="size:10" text="Allegati" width="75" />
+<t:button id="w_cb2" actionListener=".{onHistory}" font="size:10" text="Storico" width="75" />
+<t:button id="w_cb3" actionListener=".{onComments}" font="size:10" text="Commenti" width="80" />
+</t:row>
+</t:pane>
 </t:gridcol>
 <t:gridcol id="w_c3" rendered="#{d.WorklistUI.summaryVisible}" text="Riepilogo" width="340" >
 <t:label id="w_c3l" text=".{summary}" />

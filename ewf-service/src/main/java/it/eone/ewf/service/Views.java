@@ -63,6 +63,14 @@ public final class Views {
     public record Comment(long id, String author, String text, Instant createdAt, boolean mine) {}
 
     /**
+     * Una barra del Gantt di un processo. who: chi ha agito o, se il task e' ancora aperto, a chi e' assegnato
+     * (persona o "Team X"). status come HistoryEntry, piu' OPEN/EXECUTING per i task in corso e START per
+     * l'avvio del processo. to null = ancora aperto.
+     */
+    public record TimelineBar(String who, String taskText, String status, String option, Instant from, Instant to,
+                              String forWhom, String note) {}
+
+    /**
      * Cosa l'utente puo' fare sul task. options non vuoto = nodo di scelta (al posto di Approva/Respingi).
      * asSubstitute: l'utente agirebbe per conto di forWhom. rowVersion: da ripassare alle azioni, cosi' se
      * un collega ha gia' firmato l'azione viene rifiutata invece di sovrascrivere.

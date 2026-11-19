@@ -31,6 +31,8 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
     private WorklistUI m_worklistUI;
     private Long m_pendingTask;
 
+    private boolean m_admin;
+
     public OutestUI(IWorkpageDispatcher dispatcher) {
         super(dispatcher);
         readDeepLink();
@@ -65,6 +67,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         EwfSession.instance().login(s);
         confirmExit(true);
         m_worklistUI = null;
+        m_admin = isAdmin(s.userId());
         Long task = m_pendingTask;
         m_pendingTask = null;
         if (task != null) {
@@ -77,7 +80,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
             Statusbar.outputWarning("L'attivita' " + task + " non e' piu' tra le tue: forse e' gia' stata completata.");
             return;
         }
-        showWorklist();
+        showMenu();
     }
 
     private Optional<WorkItem> findTask(long taskId) {
@@ -93,6 +96,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         EwfSession.instance().logout();
         confirmExit(false);
         m_worklistUI = null;
+        m_admin = false;
         showLogon();
     }
 
@@ -113,6 +117,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
             m_worklistUI.prepare(new WorklistUI.IListener() {
                 @Override public void reactOnOpen(long processId) { showDetail(processId); }
                 @Override public void reactOnLogout() { logout(); }
+                @Override public void reactOnMenu() { showMenu(); }
             });
         } else {
             m_worklistUI.reload();
@@ -127,5 +132,58 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
             @Override public void reactOnLogout() { logout(); }
         });
         m_contentUI = ui;
+    }
+
+    // ------------------------------------------------------------------ menu
+
+    private void showMenu() {
+        MenuUI ui = new MenuUI();
+        ui.prepare(m_admin, errorCount(), new MenuUI.IListener() {
+            @Override public void reactOnMenuChoice(String choice) { open(choice); }
+            @Override public void reactOnLogout() { logout(); }
+        });
+        m_contentUI = ui;
+    }
+
+    private void open(String choice) {
+        IBackToMenu back = this::showMenu;
+        switch (choice) {
+            case MenuUI.TASKS -> showWorklist();
+            case MenuUI.SUBSTITUTIONS -> {
+                SubstitutionsUI ui = new SubstitutionsUI();
+                ui.setBack(back);
+                m_contentUI = ui;
+            }
+            case MenuUI.ERRORS -> {
+                if (!m_admin) return;
+                ErrorsUI ui = new ErrorsUI();
+                ui.prepare(n -> { }, back);
+                m_contentUI = ui;
+            }
+            case MenuUI.PASSWORD -> {
+                LogonUI ui = new LogonUI();
+                ui.prepareChange(EwfSession.instance().user(), changed -> showMenu());
+                m_contentUI = ui;
+            }
+            default -> { }
+        }
+    }
+
+    private static boolean isAdmin(long userId) {
+        try {
+            return EwfApp.get().admin().isAdmin(userId);
+        } catch (RuntimeException e) {
+            System.err.println("[OutestUI] Verifica amministratore non riuscita: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private int errorCount() {
+        if (!m_admin) return 0;
+        try {
+            return EwfApp.get().admin().processesInError(EwfSession.instance().userId()).size();
+        } catch (RuntimeException e) {
+            return 0;
+        }
     }
 }

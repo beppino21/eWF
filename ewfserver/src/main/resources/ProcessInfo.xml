@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="p_0" beanbinding="#{d.ProcessInfoUI}" >
+<t:filedownload id="p_dl" trigger="#{d.ProcessInfoUI.downloadTrigger}" url="#{d.ProcessInfoUI.downloadUrl}" />
+</t:beanprocessing>
+<t:rowheader id="p_h" coldistance="6" >
+<t:label id="p_ht" font="weight:bold" text="#{d.ProcessInfoUI.title}" />
+<t:coldistance id="p_hd" width="100%" />
+<t:button id="p_b1" actionListener="#{d.ProcessInfoUI.onShowHistory}" background="#{d.ProcessInfoUI.historyBg}" text="#{d.ProcessInfoUI.historyText}" width="110+" />
+<t:button id="p_b2" actionListener="#{d.ProcessInfoUI.onShowGantt}" background="#{d.ProcessInfoUI.ganttBg}" text="Gantt" width="80" />
+<t:button id="p_b3" actionListener="#{d.ProcessInfoUI.onShowComments}" background="#{d.ProcessInfoUI.commentsBg}" text="#{d.ProcessInfoUI.commentsText}" width="120+" />
+<t:button id="p_b4" actionListener="#{d.ProcessInfoUI.onShowAttachments}" background="#{d.ProcessInfoUI.attachmentsBg}" text="#{d.ProcessInfoUI.attachmentsText}" width="110+" />
+</t:rowheader>
+<t:rowdistance id="p_hd2" height="8" />
+<t:rowbodypane id="p_body" rowdistance="6" >
+
+<!-- ===== Storico ===== -->
+<t:row id="s_1" rendered="#{d.ProcessInfoUI.historyMode}" >
+<t:fixgrid id="s_g" avoidrowstretching="true" height="100%" objectbinding="#{d.ProcessInfoUI.history}" sbvisibleamount="12" width="100%" >
+<t:gridcol id="s_c1" sortreference=".{whenSort}" text="Data" width="120" >
+<t:label id="s_c1l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="s_c2" text="Attivita'" width="220" >
+<t:label id="s_c2l" text=".{task}" />
+</t:gridcol>
+<t:gridcol id="s_c3" text="Esito" width="140" >
+<t:label id="s_c3l" text=".{outcome}" />
+</t:gridcol>
+<t:gridcol id="s_c4" text="Chi" width="200" >
+<t:label id="s_c4l" text=".{who}" />
+</t:gridcol>
+<t:gridcol id="s_c5" text="Nota" width="100%" >
+<t:label id="s_c5l" text=".{note}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+
+<!-- ===== Gantt ===== -->
+<t:row id="g_1" rendered="#{d.ProcessInfoUI.ganttMode}" >
+<t:scrollpane id="g_sp" height="100%" width="100%" >
+<t:rowdynamiccontent id="g_dc" contentbinding="#{d.ProcessInfoUI.gantt}" />
+</t:scrollpane>
+</t:row>
+
+<!-- ===== Commenti ===== -->
+<t:row id="c_1" rendered="#{d.ProcessInfoUI.commentsMode}" >
+<t:fixgrid id="c_g" avoidrowstretching="true" height="100%" objectbinding="#{d.ProcessInfoUI.comments}" sbvisibleamount="10" width="100%" >
+<t:gridcol id="c_c1" text="Data" width="120" >
+<t:label id="c_c1l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="c_c2" text="Autore" width="180" >
+<t:label id="c_c2l" text=".{author}" />
+</t:gridcol>
+<t:gridcol id="c_c3" text="Commento" width="100%" >
+<t:label id="c_c3l" text=".{text}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="c_2" coldistance="8" rendered="#{d.ProcessInfoUI.commentsEditRow}" >
+<t:textarea id="c_2t" height="50" text="#{d.ProcessInfoUI.newComment}" width="100%" />
+<t:button id="c_2b" actionListener="#{d.ProcessInfoUI.onAddComment}" text="Aggiungi" width="100" />
+</t:row>
+
+<!-- ===== Allegati ===== -->
+<t:row id="f_m" rendered="#{d.ProcessInfoUI.attachmentsMessageRow}" >
+<t:label id="f_ml" foreground="#B00020" text="#{d.ProcessInfoUI.attachmentsMessage}" />
+</t:row>
+<t:row id="f_1" rendered="#{d.ProcessInfoUI.attachmentsMode}" >
+<t:fixgrid id="f_g" avoidrowstretching="true" height="100%" objectbinding="#{d.ProcessInfoUI.attachments}" sbvisibleamount="8" width="100%" >
+<t:gridcol id="f_c1" text="File" width="100%" >
+<t:label id="f_c1l" text=".{name}" />
+</t:gridcol>
+<t:gridcol id="f_c2" text="Dim." width="80" >
+<t:label id="f_c2l" align="right" text=".{size}" />
+</t:gridcol>
+<t:gridcol id="f_c3" text="Caricato da" width="160" >
+<t:label id="f_c3l" text=".{by}" />
+</t:gridcol>
+<t:gridcol id="f_c4" text="Il" width="120" >
+<t:label id="f_c4l" text=".{when}" />
+</t:gridcol>
+<t:gridcol id="f_c5" text="" width="90" >
+<t:button id="f_c5b" actionListener=".{onDownload}" text="Scarica" width="80" />
+</t:gridcol>
+<t:gridcol id="f_c6" text="" width="90" >
+<t:button id="f_c6b" actionListener=".{onDelete}" rendered=".{deletable}" text="Elimina" width="80" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="f_2" rendered="#{d.ProcessInfoUI.uploadRow}" >
+<t:fileuploadbutton id="f_2u" actionListener="#{d.ProcessInfoUI.onUpload}" maxfilesize="20000000" multiselect="true" text="Allega file..." width="160" />
+</t:row>
+
+</t:rowbodypane>
+
+</t:layoutdefinition>

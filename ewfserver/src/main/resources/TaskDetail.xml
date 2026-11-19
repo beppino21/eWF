@@ -9,8 +9,6 @@
 <t:button id="d_3b" actionListener="#{d.TaskDetailUI.onBack}" text="&#171; Lista" width="80" />
 <t:coldistance id="d_3c" width="100%" />
 <t:button id="d_3r" actionListener="#{d.TaskDetailUI.onRefresh}" text="Aggiorna" width="80" />
-<t:coldistance id="d_3d" width="8" />
-<t:button id="d_3l" actionListener="#{d.TaskDetailUI.onLogout}" text="Logout" width="80" />
 </t:rowheader>
 <t:rowdistance id="d_4" height="10" />
 <t:rowbodypane id="d_5" rendered="#{d.TaskDetailUI.loaded}" >
@@ -129,6 +127,9 @@
 <t:label id="s_c5l" text=".{note}" />
 </t:gridcol>
 </t:fixgrid>
+</t:row>
+<t:row id="s_gb" >
+<t:button id="s_gbb" actionListener="#{d.TaskDetailUI.onGantt}" text="Gantt" width="80" />
 </t:row>
 </t:foldablepane>
 </t:row>

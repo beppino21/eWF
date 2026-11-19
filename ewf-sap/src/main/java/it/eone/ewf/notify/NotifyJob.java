@@ -29,7 +29,8 @@ import java.util.Optional;
  *  - task gia' chiuso (es. saltato in automatico) o destinatario senza indirizzo: nessuna mail, esito registrato.
  * Ripetere e' sicuro: chiave anti-doppione per task e destinatario.
  *
- * Parametri: batch (default 100), baseUrl (indirizzo dell'interfaccia eWF per il link al task; vuoto = nessun link).
+ * Parametri: batch (default 100), baseUrl (indirizzo dell'applicazione web eWF, es. https://server/ewfserver; il link al task e'
+ * <baseUrl>/Outest.risc?task=<id>; vuoto = nessun link).
  */
 public final class NotifyJob implements Job {
 
@@ -41,11 +42,22 @@ public final class NotifyJob implements Job {
     private final MailTemplates templates;
     private final Clock clock;
 
+    private final String defaultBaseUrl;
+
     public NotifyJob(DataSource ds, Clock clock) {
+        this(ds, clock, "");
+    }
+
+    /**
+     * @param defaultBaseUrl indirizzo dell'applicazione web usato quando il job non ha il parametro baseUrl
+     *                       (tipicamente EWF_APP_BASE_URL della configurazione dell'applicazione)
+     */
+    public NotifyJob(DataSource ds, Clock clock, String defaultBaseUrl) {
         this.ds = ds;
         this.outbox = new MailOutbox(new Db(ds));
         this.templates = new MailTemplates(ds);
         this.clock = clock;
+        this.defaultBaseUrl = defaultBaseUrl == null ? "" : defaultBaseUrl;
     }
 
     private record Pending(long id, String kind, long taskId) {}
@@ -54,6 +66,7 @@ public final class NotifyJob implements Job {
     public JobResult run(JobContext ctx) throws SQLException {
         int batch = Integer.parseInt(ctx.param("batch", "100"));
         String baseUrl = ctx.param("baseUrl", "");
+        if (baseUrl.isBlank()) baseUrl = defaultBaseUrl;
         LocalDate today = LocalDate.now(clock);
         long mails = 0, skipped = 0;
         while (!ctx.stopRequested()) {
@@ -91,7 +104,7 @@ public final class NotifyJob implements Job {
         Map<String, String> vars = new HashMap<>(t.vars());
         vars.put("user", r.name());
         if (r.onBehalfOf() != null) vars.put("task", t.taskText() + " (in sostituzione di " + r.onBehalfOf() + ")");
-        String url = baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "") + "/task/" + t.taskId();
+        String url = baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "") + "/Outest.risc?task=" + t.taskId();
         vars.put("link", url == null ? "" : "Apri l'attivita': " + url);
         vars.put("linkHtml", url == null ? "" : "<a href=\"" + MailTemplates.escape(url) + "\">Apri l'attivit&agrave;</a>");
         MailTemplates.Rendered m = MailTemplates.render(templates.load("TASK_ACTIVATED", "it"), vars);

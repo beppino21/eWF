@@ -34,21 +34,26 @@ import it.eone.ewf.ewfserver.config.AppConfig;
  * tutte le schermate non compaiono violazioni, la stessa policy si può
  * portare in system.xml. Vuoto o assente = nessuna intestazione di prova.
  *
- * Disattivabile con EWF_SECURITY_HEADERS=false; HSTS con SECURITY_HSTS=false.
+ * Disattivabile con EWF_SECURITY_HEADERS=false; HSTS con EWF_SECURITY_HSTS=false.
+ * In sviluppo, per l'anteprima del designer: EWF_FRAME_ALLOWED=http://localhost:51000 (il filtro resta attivo).
  */
 public class SecurityHeadersFilter implements Filter {
 
     private boolean abilitato = true;
     private boolean hsts      = true;
     private String  cspReportOnly;
+    /** Origini in piu' autorizzate a incorniciare l'app (solo sviluppo: l'anteprima del designer). */
+    private String  frameAllowed = "";
 
     @Override
     public void init(FilterConfig cfg) {
         abilitato = AppConfig.getBoolean("EWF_SECURITY_HEADERS", true);
         hsts      = AppConfig.getBoolean("EWF_SECURITY_HSTS", true);
         cspReportOnly = AppConfig.get("EWF_CSP_REPORT_ONLY", null);
+        frameAllowed = origins(AppConfig.get("EWF_FRAME_ALLOWED", ""));
         System.out.println("[SecurityHeadersFilter] abilitato=" + abilitato + " hsts=" + hsts
-            + (cspReportOnly != null ? " CSP_REPORT_ONLY=" + cspReportOnly : ""));
+            + (cspReportOnly != null ? " CSP_REPORT_ONLY=" + cspReportOnly : "")
+            + (frameAllowed.isEmpty() ? "" : " incorniciabile anche da: " + frameAllowed));
     }
 
     @Override
@@ -58,8 +63,14 @@ public class SecurityHeadersFilter implements Filter {
             HttpServletRequest  r = (HttpServletRequest) req;
             HttpServletResponse h = (HttpServletResponse) res;
             h.setHeader("X-Content-Type-Options", "nosniff");
-            h.setHeader("X-Frame-Options", "SAMEORIGIN");
-            h.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+            if (frameAllowed.isEmpty()) {
+                h.setHeader("X-Frame-Options", "SAMEORIGIN");
+                h.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+            } else {
+                // X-Frame-Options non sa elencare piu' origini: vale frame-ancestors, che i browser
+                // considerano comunque prima di X-Frame-Options.
+                h.setHeader("Content-Security-Policy", "frame-ancestors 'self' " + frameAllowed);
+            }
             h.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
             h.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
             if (hsts && (r.isSecure() || "https".equalsIgnoreCase(r.getHeader("X-Forwarded-Proto")))) {
@@ -70,6 +81,25 @@ public class SecurityHeadersFilter implements Filter {
             }
         }
         chain.doFilter(req, res);
+    }
+
+    /**
+     * EWF_FRAME_ALLOWED: origini separate da virgola o spazio, es. "http://localhost:51000".
+     * Accetta solo http(s)://host[:porta]; il resto viene scartato (e segnalato), cosi' nell'intestazione
+     * non finisce mai testo arbitrario.
+     */
+    static String origins(String raw) {
+        StringBuilder out = new StringBuilder();
+        for (String o : (raw == null ? "" : raw).split("[,\\s]+")) {
+            if (o.isBlank()) continue;
+            if (o.matches("https?://[A-Za-z0-9.-]+(:\\d{1,5})?")) {
+                if (out.length() > 0) out.append(' ');
+                out.append(o);
+            } else {
+                System.err.println("[SecurityHeadersFilter] EWF_FRAME_ALLOWED: origine non valida ignorata: " + o);
+            }
+        }
+        return out.toString();
     }
 
     @Override

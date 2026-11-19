@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="e_1" beanbinding="#{d.ErrorsUI}" />
+<t:rowtitlebar id="e_2" text="Processi in errore" />
+<t:rowheader id="e_3" >
+<t:button id="e_3m" actionListener="#{d.ErrorsUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="e_3md" width="12" />
+<t:label id="e_3s" font="weight:bold" text="#{d.ErrorsUI.status}" />
+<t:coldistance id="e_3c" width="100%" />
+<t:button id="e_3r" actionListener="#{d.ErrorsUI.onRefresh}" text="Aggiorna" width="80" />
+</t:rowheader>
+<t:rowdistance id="e_4" height="10" />
+<t:rowbodypane id="e_5" rowdistance="10" >
+
+<t:row id="e_gr" >
+<t:fixgrid id="e_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.ErrorsUI.grid}" sbvisibleamount="12" width="100%" >
+<t:gridcol id="e_c1" sortreference=".{sinceSort}" text="Da quando" width="120" >
+<t:label id="e_c1l" text=".{since}" />
+</t:gridcol>
+<t:gridcol id="e_c2" text="Processo" width="170" >
+<t:label id="e_c2l" text=".{process}" />
+</t:gridcol>
+<t:gridcol id="e_c3" text="Documento" width="100" >
+<t:label id="e_c3l" font="weight:bold" text=".{document}" />
+</t:gridcol>
+<t:gridcol id="e_c4" text="Problema" width="250" >
+<t:label id="e_c4l" background=".{kindColor}" text=".{kind}" />
+</t:gridcol>
+<t:gridcol id="e_c5" text="Attivita'" width="200" >
+<t:label id="e_c5l" text=".{task}" />
+</t:gridcol>
+<t:gridcol id="e_c6" text="Messaggio" width="100%" >
+<t:label id="e_c6l" text=".{message}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+
+<t:row id="e_hint" rendered="#{d.ErrorsUI.nothingSelected}" >
+<t:label id="e_hintl" foreground="#777777" text="Selezionare un processo per vedere il dettaglio e le azioni possibili." />
+</t:row>
+
+<!-- ===== Dettaglio del processo selezionato ===== -->
+<t:row id="d_r" rendered="#{d.ErrorsUI.selected}" >
+<t:foldablepane id="d_fp" rowdistance="6" text="#{d.ErrorsUI.selectedTitle}" width="100%" >
+<t:row id="d_t" >
+<t:textpane id="d_tt" text="#{d.ErrorsUI.selectedDetail}" width="100%" />
+</t:row>
+
+<!-- Esito incerto: verificare in SAP e confermare -->
+<t:rowdistance id="u_d" height="6" rendered="#{d.ErrorsUI.unknownSelected}" />
+<t:row id="u_1" rendered="#{d.ErrorsUI.unknownSelected}" >
+<t:textpane id="u_1t" foreground="#1565C0" text="La chiamata a SAP non ha dato una risposta certa (es. interruzione di rete): l'operazione potrebbe essere stata eseguita oppure no. Verificare il documento in SAP e registrare cosa risulta." width="100%" />
+</t:row>
+<t:row id="u_2" rendered="#{d.ErrorsUI.unknownSelected}" >
+<t:textarea id="u_2a" height="60" labeltext="Nota (obbligatoria)" text="#{d.ErrorsUI.note}" width="100%" />
+</t:row>
+<t:row id="u_3" coldistance="8" rendered="#{d.ErrorsUI.unknownSelected}" >
+<t:button id="u_3y" actionListener="#{d.ErrorsUI.onConfirmDone}" text="In SAP risulta eseguita" width="180+" />
+<t:button id="u_3n" actionListener="#{d.ErrorsUI.onConfirmNotDone}" text="In SAP NON risulta eseguita" width="200+" />
+</t:row>
+
+<!-- Azione finale non riuscita: togliere la causa e riprovare -->
+<t:rowdistance id="f_d" height="6" rendered="#{d.ErrorsUI.endFailedSelected}" />
+<t:row id="f_1" rendered="#{d.ErrorsUI.endFailedSelected}" >
+<t:textpane id="f_1t" foreground="#1565C0" text="Il processo e' approvato ma l'azione finale in SAP non e' riuscita (es. documento bloccato in modifica, dato mancante). Togliere la causa in SAP e riprovare." width="100%" />
+</t:row>
+<t:row id="f_2" rendered="#{d.ErrorsUI.endFailedSelected}" >
+<t:button id="f_2b" actionListener="#{d.ErrorsUI.onRetry}" text="Riprova azione finale" width="180+" />
+</t:row>
+
+<t:row id="x_1" rendered="#{d.ErrorsUI.otherSelected}" >
+<t:textpane id="x_1t" foreground="#777777" text="Per questo tipo di errore non c'e' ancora un'azione da qui: serve l'intervento tecnico." width="100%" />
+</t:row>
+</t:foldablepane>
+</t:row>
+
+</t:rowbodypane>
+
+</t:layoutdefinition>

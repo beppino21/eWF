@@ -31,7 +31,7 @@ import java.util.Map;
  * Chi oggi e' sostituito non riceve il suo riepilogo: i suoi task arrivano al sostituto (come il legacy).
  * Nessuna attivita' in attesa: nessuna mail, e last_mail_on non cambia.
  *
- * Parametri: baseUrl (link all'interfaccia eWF; vuoto = nessun link).
+ * Parametri: baseUrl (indirizzo dell'applicazione web eWF; il link e' <baseUrl>/Outest.risc; vuoto = nessun link).
  */
 public final class DigestJob implements Job {
 
@@ -43,11 +43,22 @@ public final class DigestJob implements Job {
     private final MailTemplates templates;
     private final Clock clock;
 
+    private final String defaultBaseUrl;
+
     public DigestJob(DataSource ds, Clock clock) {
+        this(ds, clock, "");
+    }
+
+    /**
+     * @param defaultBaseUrl indirizzo dell'applicazione web usato quando il job non ha il parametro baseUrl
+     *                       (tipicamente EWF_APP_BASE_URL della configurazione dell'applicazione)
+     */
+    public DigestJob(DataSource ds, Clock clock, String defaultBaseUrl) {
         this.ds = ds;
         this.outbox = new MailOutbox(new Db(ds));
         this.templates = new MailTemplates(ds);
         this.clock = clock;
+        this.defaultBaseUrl = defaultBaseUrl == null ? "" : defaultBaseUrl;
     }
 
     private record DigestUser(long id, String login, String name, String email, int everyDays) {}
@@ -55,6 +66,7 @@ public final class DigestJob implements Job {
     @Override
     public JobResult run(JobContext ctx) throws SQLException {
         String baseUrl = ctx.param("baseUrl", "");
+        if (baseUrl.isBlank()) baseUrl = defaultBaseUrl;
         LocalDate today = LocalDate.now(clock);
         ZoneId zone = clock.getZone();
         long mails = 0, nothing = 0;
@@ -81,7 +93,7 @@ public final class DigestJob implements Job {
             vars.put("rowsHtml", html(mine, today, zone, null));
             vars.put("teamRows", team.isEmpty() ? "" : "Da prendere in carico (team):\n" + text(team, today, zone));
             vars.put("teamRowsHtml", team.isEmpty() ? "" : html(team, today, zone, "Da prendere in carico (team)"));
-            String url = baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "");
+            String url = baseUrl.isBlank() ? null : baseUrl.replaceAll("/+$", "") + "/Outest.risc";
             vars.put("link", url == null ? "" : "Apri eWF: " + url);
             vars.put("linkHtml", url == null ? "" : "<a href=\"" + MailTemplates.escape(url) + "\">Apri eWF</a>");
             MailTemplates.Rendered m = MailTemplates.render(templates.load("DIGEST", "it"), vars);

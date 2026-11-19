@@ -1,7 +1,5 @@
 package it.eone.ewf.ewfserver.app;
 
-import java.util.Optional;
-
 import it.eone.ewf.engine.spi.DocumentAdapterRegistry;
 import it.eone.ewf.engine.spi.HandlerRegistry;
 import it.eone.ewf.sap.SapDestinations;
@@ -9,6 +7,8 @@ import it.eone.ewf.sap.SapDocumentAdapter;
 import it.eone.ewf.sap.SapHandlerRegistry;
 import it.eone.ewf.sap.sheet.SapDocumentSheets;
 import it.eone.ewf.service.EwfService;
+
+import java.util.Optional;
 
 /**
  * Collegamento a SAP via JCo (ewf-sap). Se JCo non e' installato in Tomcat o la destinazione non e' valida,
@@ -18,6 +18,15 @@ record Sap(String destination, HandlerRegistry handlers, DocumentAdapterRegistry
 
     static Sap none() {
         return new Sap(null, code -> Optional.empty(), docType -> Optional.empty(), EwfService.Backends.none());
+    }
+
+    /** Alla chiusura dell'applicazione: toglie da JCo il provider delle destinazioni (vedi SapDestinations.unregister). */
+    static void disconnect() {
+        try {
+            SapDestinations.unregister();
+        } catch (LinkageError | RuntimeException e) {
+            System.err.println("[EwfApp] Chiusura collegamento SAP: " + e);
+        }
     }
 
     static Sap connect(String dest) {

@@ -218,6 +218,47 @@ public final class EwfService {
         });
     }
 
+    /**
+     * Linea del tempo del processo per il Gantt: l'avvio e tutti i task, anche quelli ancora aperti,
+     * in ordine di arrivo. Stesse regole di visibilita' del dettaglio.
+     */
+    public List<TimelineBar> timeline(long userId, long processId) {
+        requireView(userId, processId);
+        Header h = header(processId);
+        List<TimelineBar> out = new ArrayList<>();
+        out.add(new TimelineBar(h.starter() == null ? "Avvio" : h.starter(), "Avvio del processo", "START", null,
+                h.startedAt(), h.startedAt(), null, null));
+        db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT td.text, t.status, t.option_code, o.label AS option_label, t.note, t.created_at, t.closed_at,
+                           t.acted_as_subst, t.team_code,
+                           ab.display_name AS acted_by, asg.display_name AS assignee
+                      FROM ewf_core.task_instance t
+                      JOIN ewf_core.task_def td ON td.id = t.task_def_id
+                      LEFT JOIN ewf_core.task_option o ON o.task_def_id = t.task_def_id AND o.option_code = t.option_code
+                      LEFT JOIN ewf_org.app_user ab ON ab.id = t.acted_by_id
+                      LEFT JOIN ewf_org.app_user asg ON asg.id = t.assignee_id
+                     WHERE t.process_id = ?
+                     ORDER BY t.created_at, t.id""")) {
+                ps.setLong(1, processId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        String who = rs.getString("acted_by");
+                        if (who == null) who = rs.getString("assignee");
+                        if (who == null && rs.getString("team_code") != null) who = "Team " + rs.getString("team_code");
+                        if (who == null) who = "(non assegnato)";
+                        String opt = rs.getString("option_label") != null ? rs.getString("option_label") : rs.getString("option_code");
+                        out.add(new TimelineBar(who, rs.getString("text"), rs.getString("status"), opt,
+                                instant(rs, "created_at"), instant(rs, "closed_at"),
+                                rs.getBoolean("acted_as_subst") ? rs.getString("assignee") : null, rs.getString("note")));
+                    }
+                }
+            }
+            return null;
+        });
+        return out;
+    }
+
     private List<HistoryEntry> history(long processId) {
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""

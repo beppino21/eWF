@@ -130,6 +130,17 @@ class NotificationJobsPostgresTest {
     }
 
     @Test
+    void senzaParametroIlLinkUsaLIndirizzoDellApplicazione() throws Exception {
+        TaskInstance t = odaAtStep20();
+        NotifyJob job = new NotifyJob(ds, Clock.systemDefaultZone(), "https://ewf.cliente.it/ewfserver");
+        JobResult r = job.run(ctx(Map.of()));
+        assertEquals(JobResult.Status.OK, r.status(), r.message());
+        List<Mail> m = mails();
+        assertEquals(1, m.size());
+        assertTrue(m.get(0).body().contains("https://ewf.cliente.it/ewfserver/Outest.risc?task=" + t.id), m.get(0).body());
+    }
+
+    @Test
     void avvisoImmediatoAlDestinatarioUnaVoltaSola() throws Exception {
         TaskInstance t = odaAtStep20();
         NotifyJob job = new NotifyJob(ds, Clock.systemDefaultZone());
@@ -141,7 +152,7 @@ class NotificationJobsPostgresTest {
         assertEquals("eWF: Rilascio Responsabile Acquisti - OdA 4500001053", m.get(0).subject());
         assertTrue(m.get(0).body().contains("5.000,00 EUR"), m.get(0).body());
         assertTrue(m.get(0).body().contains("Fornitore:  11000141"), m.get(0).body());
-        assertTrue(m.get(0).body().contains("https://ewf.cliente.it/task/" + t.id), m.get(0).body());
+        assertTrue(m.get(0).body().contains("https://ewf.cliente.it/Outest.risc?task=" + t.id), m.get(0).body());
         assertTrue(m.get(0).html().contains("Rilascio Responsabile Acquisti"));
         assertEquals(JobResult.Status.IDLE, job.run(ctx(Map.of())).status(), "notifica gia' elaborata");
         assertEquals(1, mails().size());
