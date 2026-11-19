@@ -16,9 +16,9 @@
 <t:row id="m_6" >
 
 <!-- ===== Funzioni (card) ===== -->
-<t:fixgrid id="m_7" avoidrowstretching="true" dynamicheightsizing="true" height="100%" objectbinding="#{d.MenuUI.cards}" rowheight="106" sbvisibleamount="6" width="450" >
+<t:fixgrid id="m_7" avoidrowstretching="true" dynamicheightsizing="true" height="100%" objectbinding="#{d.MenuUI.cards}" rowheight="106" sbvisibleamount="7" width="450" >
 <t:gridcol id="m_8" width="100%" >
-<t:pane id="m_9" actionListener=".{onSelect}" background="#FFFFFF" border="#CCCCCC" invokeevent="leftclick" padding="14" width="100%" >
+<t:pane id="m_9" actionListener=".{onSelect}" background=".{background}" border="#CCCCCC" invokeevent="leftclick" padding="14" width="100%" >
 <t:row id="m_10" >
 <t:label id="m_11" font="size:13;weight:bold" text=".{title}" />
 </t:row>

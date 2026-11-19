@@ -94,7 +94,7 @@ public final class EwfApp {
                 new RateCurrencyConverter(), clock, new EngineConfig(EngineConfig.defaults().fallbackTeamCode(), zone));
         long maxMb = AppConfig.getInt("EWF_MAX_ATTACHMENT_MB", 20);
         service = new EwfService(engine, db, new JdbcUserDirectory(db), sap.handlers(), sap.backends(), clock, zone,
-                new EwfService.Config(maxMb * 1024 * 1024, 4000));
+                new EwfService.Config(maxMb * 1024 * 1024, 4000, EngineConfig.defaults().fallbackTeamCode()));
         auth = new AuthService(db, new PasswordHasher(), clock);
         substitutions = new SubstitutionService(db, clock, zone);
         // Amministratori eWF = membri del team di riserva del motore (WFADM): gli stessi che ricevono i task orfani.

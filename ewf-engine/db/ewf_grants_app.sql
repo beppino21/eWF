@@ -32,9 +32,18 @@ GRANT UPDATE (deleted_at, deleted_by) ON ewf_core.attachment TO ewf_app;
 -- Regole di avvio (gestibili dall'applicazione)
 GRANT INSERT, UPDATE, DELETE ON ewf_core.start_rule TO ewf_app;
 
--- Utenti: solo i campi dell'accesso e la data dell'ultimo riepilogo
+-- Utenti: campi dell'accesso e data dell'ultimo riepilogo; gestione utenti dall'amministratore
+-- (creazione, anagrafica essenziale, classe, permesso di sostituzione, attivo/disattivo; il login non cambia)
+GRANT INSERT ON ewf_org.app_user TO ewf_app;
 GRANT UPDATE (password_hash, password_must_change, last_login_at, failed_logins, locked_until,
-              last_mail_on, updated_at) ON ewf_org.app_user TO ewf_app;
+              last_mail_on, updated_at,
+              display_name, email, sap_user, user_class_code, can_substitute, active) ON ewf_org.app_user TO ewf_app;
+
+-- Team e appartenenze, gestiti dagli amministratori (il codice del team non cambia)
+GRANT INSERT ON ewf_org.team TO ewf_app;
+GRANT UPDATE (description) ON ewf_org.team TO ewf_app;
+GRANT INSERT, DELETE ON ewf_org.team_member TO ewf_app;
+GRANT UPDATE (valid_from, valid_to) ON ewf_org.team_member TO ewf_app;
 
 -- Sostituzioni indicate dagli utenti stessi
 GRANT INSERT, DELETE ON ewf_org.substitution TO ewf_app;

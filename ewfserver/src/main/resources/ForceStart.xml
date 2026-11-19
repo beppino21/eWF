@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="fs_0" beanbinding="#{d.ForceStartUI}" />
+<t:rowtitlebar id="fs_1" text="Avvio forzato di un processo" />
+<t:rowheader id="fs_h" >
+<t:button id="fs_back" actionListener="#{d.ForceStartUI.onBackToMenu}" text="« Menu" width="80" />
+</t:rowheader>
+<t:rowbodypane id="fs_body" padding="20" rowdistance="12" >
+<t:row id="fs_i" >
+<t:label id="fs_il" font="size:12;color:#666666" text="Avvia un processo per un documento che non e' arrivato dalla coda (o e' stato annullato). Sono proposti solo i processi ammessi per il tipo documento." width="100%" />
+</t:row>
+<t:row id="fs_r1" coldistance="8" >
+<t:label id="fs_r1l" text="Tipo documento:" width="140" />
+<t:combobox id="fs_r1c" actionListener="#{d.ForceStartUI.onDocTypeChanged}" flush="true" validvaluesbinding="#{d.ForceStartUI.docTypesVVB}" value="#{d.ForceStartUI.docType}" width="200" withnullitem="true" />
+</t:row>
+<t:row id="fs_r2" coldistance="8" >
+<t:label id="fs_r2l" text="Processo:" width="140" />
+<t:combobox id="fs_r2c" flush="true" validvaluesbinding="#{d.ForceStartUI.typesVVB}" value="#{d.ForceStartUI.processType}" width="360" withnullitem="true" />
+</t:row>
+<t:row id="fs_r3" coldistance="8" >
+<t:label id="fs_r3l" text="Documento:" width="140" />
+<t:field id="fs_r3f" text="#{d.ForceStartUI.document}" width="200" />
+</t:row>
+<t:row id="fs_r4" coldistance="8" >
+<t:coldistance id="fs_r4d" width="148" />
+<t:button id="fs_r4b" actionListener="#{d.ForceStartUI.onStart}" text="Avvia »" width="120" />
+</t:row>
+<t:row id="fs_r5" coldistance="8" rendered="#{d.ForceStartUI.hasResult}" >
+<t:pane id="fs_r5p" background="#E8F5E9" border="#81C784" padding="10" width="100%" >
+<t:row id="fs_r5r" coldistance="12" >
+<t:label id="fs_r5l" font="weight:bold;color:#2E7D32" text="#{d.ForceStartUI.result}" />
+<t:link id="fs_r5k" actionListener="#{d.ForceStartUI.onOpenStarted}" text="Apri" />
+</t:row>
+</t:pane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

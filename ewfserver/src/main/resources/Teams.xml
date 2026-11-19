@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="tm_0" beanbinding="#{d.TeamsUI}" />
+<t:rowtitlebar id="tm_1" text="Team" />
+<t:rowheader id="tm_h" coldistance="6" >
+<t:button id="tm_back" actionListener="#{d.TeamsUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="tm_hd" width="100%" />
+<t:button id="tm_new" actionListener="#{d.TeamsUI.onNewTeam}" text="Nuovo team" width="110" />
+</t:rowheader>
+<t:rowbodypane id="tm_body" padding="14" >
+<t:row id="tm_r" >
+
+<!-- ===== Elenco team ===== -->
+<t:fixgrid id="tm_g" avoidrowstretching="true" height="100%" objectbinding="#{d.TeamsUI.teams}" rowalignmenty="top" sbvisibleamount="15" width="420" >
+<t:gridcol id="tm_c1" text="Codice" width="110" >
+<t:label id="tm_c1l" font="weight:bold" text=".{code}" />
+</t:gridcol>
+<t:gridcol id="tm_c2" text="Descrizione" width="100%" >
+<t:label id="tm_c2l" text=".{description}" />
+</t:gridcol>
+<t:gridcol id="tm_c3" text="Membri" width="65" >
+<t:label id="tm_c3l" align="right" text=".{members}" />
+</t:gridcol>
+<t:gridcol id="tm_c4" text="" width="100" >
+<t:label id="tm_c4l" font="size:10;color:#E65100" text=".{adminMark}" />
+</t:gridcol>
+</t:fixgrid>
+<t:coldistance id="tm_cd" width="16" />
+
+<!-- ===== Team selezionato ===== -->
+<t:pane id="tm_p" height="100%" rowalignmenty="top" rowdistance="8" width="100%" >
+<t:row id="tm_hint" rendered="#{d.TeamsUI.notEditing}" >
+<t:label id="tm_hintl" foreground="#777777" text="Selezionare un team per vederne i membri, oppure crearne uno nuovo." />
+</t:row>
+<t:row id="tm_e0" rendered="#{d.TeamsUI.editing}" >
+<t:label id="tm_e0l" font="weight:bold;color:#1565C0" text="#{d.TeamsUI.editTitle}" />
+</t:row>
+<t:row id="tm_e1" coldistance="10" rendered="#{d.TeamsUI.editing}" >
+<t:field id="tm_e1a" enabled="#{d.TeamsUI.codeEditable}" labeltext="Codice" text="#{d.TeamsUI.code}" width="140" />
+<t:field id="tm_e1b" labeltext="Descrizione" text="#{d.TeamsUI.description}" width="300" />
+<t:button id="tm_e1s" actionListener="#{d.TeamsUI.onSaveTeam}" text="Salva" width="90" />
+</t:row>
+<t:row id="tm_m" rendered="#{d.TeamsUI.existingTeam}" >
+<t:fixgrid id="tm_mg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TeamsUI.members}" sbvisibleamount="10" width="100%" >
+<t:gridcol id="tm_mc1" text="Utente" width="200" >
+<t:label id="tm_mc1l" font="weight:bold" text=".{name}" />
+</t:gridcol>
+<t:gridcol id="tm_mc2" text="Login" width="110" >
+<t:label id="tm_mc2l" text=".{login}" />
+</t:gridcol>
+<t:gridcol id="tm_mc3" text="Dal" width="100" >
+<t:label id="tm_mc3l" text=".{from}" />
+</t:gridcol>
+<t:gridcol id="tm_mc4" text="Al" width="110" >
+<t:label id="tm_mc4l" text=".{to}" />
+</t:gridcol>
+<t:gridcol id="tm_mc5" text="Stato" width="80" >
+<t:label id="tm_mc5l" align="center" background=".{stateColor}" text=".{state}" />
+</t:gridcol>
+<t:gridcol id="tm_mc6" text="" width="80" >
+<t:button id="tm_mc6b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="tm_mc7" text="" width="80" >
+<t:button id="tm_mc7b" actionListener=".{onRemove}" rendered=".{removable}" text="Togli" width="72" />
+</t:gridcol>
+<t:gridcol id="tm_mc8" text="" width="100%" >
+<t:label id="tm_mc8l" text="" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="tm_a0" rendered="#{d.TeamsUI.existingTeam}" >
+<t:label id="tm_a0l" font="weight:bold" text="Aggiungi o modifica un membro" />
+</t:row>
+<t:row id="tm_a1" coldistance="8" rendered="#{d.TeamsUI.existingTeam}" >
+<t:combobox id="tm_a1u" labeltext="Utente" validvaluesbinding="#{d.TeamsUI.usersVVB}" value="#{d.TeamsUI.user}" width="260" withnullitem="true" />
+<t:calendarfield id="tm_a1f" format="date" formatmask="dd/MM/yyyy" labeltext="Dal (vuoto = sempre)" timezone="LOCAL" value="#{d.TeamsUI.from}" width="120" />
+<t:calendarfield id="tm_a1t" format="date" formatmask="dd/MM/yyyy" labeltext="Al (vuoto = senza scadenza)" timezone="LOCAL" value="#{d.TeamsUI.to}" width="120" />
+<t:button id="tm_a1b" actionListener="#{d.TeamsUI.onAddMember}" text="Salva" width="90" />
+</t:row>
+</t:pane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

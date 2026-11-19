@@ -53,10 +53,20 @@ public final class JdbcOrgWriter {
                 ps.setBoolean(i++, active);
                 if (mailEveryDays == null) ps.setNull(i, java.sql.Types.INTEGER);
                 else ps.setInt(i, mailEveryDays);
+                long newId;
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
-                    return rs.getLong(1);
+                    newId = rs.getLong(1);
                 }
+                if (id != null) {
+                    // id imposto (import dal legacy): il contatore deve superarlo, altrimenti il primo utente
+                    // creato dall'applicazione riceverebbe un id gia' usato
+                    try (PreparedStatement sv = c.prepareStatement("SELECT setval(pg_get_serial_sequence('ewf_org.app_user', 'id'),"
+                            + " greatest((SELECT max(id) FROM ewf_org.app_user), 1))")) {
+                        sv.executeQuery().close();
+                    }
+                }
+                return newId;
             }
         });
     }

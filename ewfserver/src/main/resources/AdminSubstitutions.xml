@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="as_0" beanbinding="#{d.AdminSubstitutionsUI}" />
+<t:rowtitlebar id="as_1" text="Sostituzioni di tutti gli utenti" />
+<t:rowheader id="as_h" >
+<t:button id="as_back" actionListener="#{d.AdminSubstitutionsUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="as_hd" width="100%" />
+<t:button id="as_ref" actionListener="#{d.AdminSubstitutionsUI.onRefresh}" text="Aggiorna" width="80" />
+</t:rowheader>
+<t:rowbodypane id="as_body" padding="14" rowdistance="10" >
+<t:row id="as_g" >
+<t:fixgrid id="as_grid" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.AdminSubstitutionsUI.grid}" sbvisibleamount="15" width="100%" >
+<t:gridcol id="as_c1" text="Titolare" width="220" >
+<t:label id="as_c1l" font="weight:bold" text=".{userName}" />
+</t:gridcol>
+<t:gridcol id="as_c2" text="Sostituto" width="220" >
+<t:label id="as_c2l" text=".{substituteName}" />
+</t:gridcol>
+<t:gridcol id="as_c3" sortreference=".{fromSort}" text="Dal" width="100" >
+<t:label id="as_c3l" text=".{from}" />
+</t:gridcol>
+<t:gridcol id="as_c4" text="Al" width="100" >
+<t:label id="as_c4l" text=".{to}" />
+</t:gridcol>
+<t:gridcol id="as_c5" text="Stato" width="110" >
+<t:label id="as_c5l" align="center" background=".{stateColor}" text=".{state}" />
+</t:gridcol>
+<t:gridcol id="as_c6" text="" width="90" >
+<t:button id="as_c6b" actionListener=".{onRemove}" text=".{removeText}" width="80" />
+</t:gridcol>
+<t:gridcol id="as_c7" text="" width="100%" >
+<t:label id="as_c7l" text="" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="as_n" >
+<t:label id="as_nl" font="weight:bold" text="Nuova sostituzione" />
+</t:row>
+<t:row id="as_f" coldistance="8" >
+<t:combobox id="as_fu" labeltext="Titolare" validvaluesbinding="#{d.AdminSubstitutionsUI.usersVVB}" value="#{d.AdminSubstitutionsUI.user}" width="240" withnullitem="true" />
+<t:combobox id="as_fs" labeltext="Sostituto" validvaluesbinding="#{d.AdminSubstitutionsUI.usersVVB}" value="#{d.AdminSubstitutionsUI.substitute}" width="240" withnullitem="true" />
+<t:calendarfield id="as_ff" format="date" formatmask="dd/MM/yyyy" labeltext="Dal" timezone="LOCAL" value="#{d.AdminSubstitutionsUI.from}" width="110" />
+<t:calendarfield id="as_ft" format="date" formatmask="dd/MM/yyyy" labeltext="Al" timezone="LOCAL" value="#{d.AdminSubstitutionsUI.to}" width="110" />
+<t:button id="as_fb" actionListener="#{d.AdminSubstitutionsUI.onAdd}" text="Aggiungi" width="90" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

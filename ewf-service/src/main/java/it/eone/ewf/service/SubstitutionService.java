@@ -3,15 +3,18 @@ package it.eone.ewf.service;
 import it.eone.ewf.engine.jdbc.JdbcTransactions;
 import it.eone.ewf.service.ServiceException.Code;
 
+import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Sostituzioni gestite dall'utente stesso ("chi mi sostituisce", "chi sto sostituendo").
@@ -115,6 +118,15 @@ public final class SubstitutionService {
     public Substitution add(long userId, long substituteId, LocalDate from, LocalDate to) {
         if (!canManage(userId))
             throw new ServiceException(Code.NOT_AUTHORIZED, "Non sei abilitato a gestire le sostituzioni");
+        return insert(userId, substituteId, from, to, userId);
+    }
+
+    /** Sostituzione indicata da un amministratore per conto di userId (il controllo dell'amministratore e' di AdminService). */
+    Substitution addFor(long adminId, long userId, long substituteId, LocalDate from, LocalDate to) {
+        return insert(userId, substituteId, from, to, adminId);
+    }
+
+    private Substitution insert(long userId, long substituteId, LocalDate from, LocalDate to, long changedBy) {
         if (from == null || to == null) throw new ServiceException(Code.INVALID, "Indicare il periodo (dal, al)");
         if (to.isBefore(from)) throw new ServiceException(Code.INVALID, "La data finale precede quella iniziale");
         if (from.isBefore(today())) throw new ServiceException(Code.INVALID, "Il periodo non puo' iniziare nel passato");
@@ -136,7 +148,7 @@ public final class SubstitutionService {
                 ps.setDate(3, Date.valueOf(from));
                 try (ResultSet rs = ps.executeQuery()) {
                     if (rs.next())
-                        throw ServiceException.of(Code.INVALID, "Hai gia' un sostituto dal %s al %s: toglilo o scegli un altro periodo",
+                        throw ServiceException.of(Code.INVALID, "C'e' gia' un sostituto dal %s al %s: toglilo o scegli un altro periodo",
                                 rs.getDate(1).toLocalDate(), rs.getDate(2).toLocalDate());
                 }
             }
@@ -147,7 +159,7 @@ public final class SubstitutionService {
                 ps.setLong(2, substituteId);
                 ps.setDate(3, Date.valueOf(from));
                 ps.setDate(4, Date.valueOf(to));
-                ps.setLong(5, userId);
+                ps.setLong(5, changedBy);
                 ps.setTimestamp(6, Timestamp.from(clock.instant()));
                 long id;
                 try (ResultSet rs = ps.executeQuery()) {
@@ -163,13 +175,28 @@ public final class SubstitutionService {
     public void remove(long userId, long substitutionId) {
         if (!canManage(userId))
             throw new ServiceException(Code.NOT_AUTHORIZED, "Non sei abilitato a gestire le sostituzioni");
+        removeInternal(userId, substitutionId, userId);
+    }
+
+    /** Un amministratore toglie la sostituzione di chiunque (il controllo e' di AdminService). */
+    void removeFor(long adminId, long substitutionId) {
+        removeInternal(null, substitutionId, adminId);
+    }
+
+    /** Tutte le sostituzioni in corso e future, di tutti gli utenti (per l'amministratore). */
+    List<Substitution> all() {
+        return list("? >= 0", 0L);   // nessun filtro sull'utente
+    }
+
+    private void removeInternal(Long ownerId, long substitutionId, long changedBy) {
         LocalDate today = today();
         db.inTransaction(() -> db.with(c -> {
             LocalDate from, to;
             try (PreparedStatement ps = c.prepareStatement(
-                    "SELECT valid_from, valid_to FROM ewf_org.substitution WHERE id = ? AND user_id = ? FOR UPDATE")) {
+                    "SELECT valid_from, valid_to FROM ewf_org.substitution WHERE id = ? AND (? IS NULL OR user_id = ?) FOR UPDATE")) {
                 ps.setLong(1, substitutionId);
-                ps.setLong(2, userId);
+                ps.setObject(2, ownerId, java.sql.Types.BIGINT);
+                ps.setObject(3, ownerId, java.sql.Types.BIGINT);
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) throw new ServiceException(Code.NOT_FOUND, "Sostituzione non trovata");
                     from = rs.getDate(1).toLocalDate();
@@ -186,7 +213,7 @@ public final class SubstitutionService {
                 try (PreparedStatement ps = c.prepareStatement(
                         "UPDATE ewf_org.substitution SET valid_to = ?, changed_by = ?, changed_at = ? WHERE id = ?")) {
                     ps.setDate(1, Date.valueOf(today.minusDays(1)));
-                    ps.setLong(2, userId);
+                    ps.setLong(2, changedBy);
                     ps.setTimestamp(3, Timestamp.from(clock.instant()));
                     ps.setLong(4, substitutionId);
                     ps.executeUpdate();
@@ -194,5 +221,106 @@ public final class SubstitutionService {
             }
             return null;
         }));
+    }
+
+    // ------------------------------------------------------------------ auto-sostituzione (come nel ticketing)
+
+    /** Nome ed e-mail di un utente, per avvisare il sostituto. */
+    public record Contact(String name, String email) {}
+
+    public Optional<Contact> contact(long userId) {
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT display_name, email FROM ewf_org.app_user WHERE id = ?")) {
+                ps.setLong(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next() ? Optional.of(new Contact(rs.getString(1), rs.getString(2))) : Optional.empty();
+                }
+            }
+        });
+    }
+
+    /**
+     * Auto-sostituzione, come nel ticketing: l'utente ha UN sostituto per un periodo. Salvare sostituisce quello
+     * indicato prima (le sostituzioni future si cancellano, quella in corso si chiude a ieri e resta nello storico).
+     * Se ce n'era una in corso, un inizio nel passato diventa "da oggi"; altrimenti il periodo parte da oggi in poi.
+     */
+    public Substitution setMine(long userId, long substituteId, LocalDate from, LocalDate to) {
+        if (!canManage(userId))
+            throw new ServiceException(Code.NOT_AUTHORIZED, "Non sei abilitato a gestire le sostituzioni");
+        if (from == null || to == null) throw new ServiceException(Code.INVALID, "Indicare il periodo (dal, al)");
+        if (to.isBefore(from)) throw new ServiceException(Code.INVALID, "La data finale precede quella iniziale");
+        if (substituteId == userId) throw new ServiceException(Code.INVALID, "Non puoi sostituire te stesso");
+        LocalDate today = today();
+        boolean running = mine(userId).stream().anyMatch(Substitution::activeToday);
+        LocalDate start = from;
+        if (start.isBefore(today)) {
+            if (!running) throw new ServiceException(Code.INVALID, "Il periodo non puo' iniziare nel passato");
+            start = today;
+        }
+        if (to.isBefore(today)) throw new ServiceException(Code.INVALID, "Il periodo e' gia' terminato");
+        LocalDate validFrom = start;
+        long id = db.inTransaction(() -> db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM ewf_org.app_user WHERE id = ? AND active")) {
+                ps.setLong(1, substituteId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new ServiceException(Code.INVALID, "Il sostituto non e' un utente attivo");
+                }
+            }
+            endCurrent(c, userId, today);
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO ewf_org.substitution (user_id, substitute_id, valid_from, valid_to, changed_by, changed_at)
+                    VALUES (?, ?, ?, ?, ?, ?) RETURNING id""")) {
+                ps.setLong(1, userId);
+                ps.setLong(2, substituteId);
+                ps.setDate(3, Date.valueOf(validFrom));
+                ps.setDate(4, Date.valueOf(to));
+                ps.setLong(5, userId);
+                ps.setTimestamp(6, Timestamp.from(clock.instant()));
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    return rs.getLong(1);
+                }
+            }
+        }));
+        return mine(userId).stream().filter(x -> x.id() == id).findFirst().orElseThrow();
+    }
+
+    /** "Rimuovi sostituzione": nessun sostituto da oggi in poi (quella in corso resta nello storico fino a ieri). */
+    public void clearMine(long userId) {
+        if (!canManage(userId))
+            throw new ServiceException(Code.NOT_AUTHORIZED, "Non sei abilitato a gestire le sostituzioni");
+        LocalDate today = today();
+        db.inTransaction(() -> db.with(c -> {
+            endCurrent(c, userId, today);
+            return null;
+        }));
+    }
+
+    /** Chiude a ieri la sostituzione in corso e cancella quelle che iniziano da oggi in poi. */
+    private void endCurrent(Connection c, long userId, LocalDate today) throws SQLException {
+        try (PreparedStatement lock = c.prepareStatement(
+                "SELECT id FROM ewf_org.substitution WHERE user_id = ? AND valid_to >= ? FOR UPDATE")) {
+            lock.setLong(1, userId);
+            lock.setDate(2, Date.valueOf(today));
+            lock.executeQuery().close();
+        }
+        try (PreparedStatement ps = c.prepareStatement(
+                "DELETE FROM ewf_org.substitution WHERE user_id = ? AND valid_from >= ?")) {
+            ps.setLong(1, userId);
+            ps.setDate(2, Date.valueOf(today));
+            ps.executeUpdate();
+        }
+        try (PreparedStatement ps = c.prepareStatement("""
+                UPDATE ewf_org.substitution SET valid_to = ?, changed_by = ?, changed_at = ?
+                 WHERE user_id = ? AND valid_from < ? AND valid_to >= ?""")) {
+            ps.setDate(1, Date.valueOf(today.minusDays(1)));
+            ps.setLong(2, userId);
+            ps.setTimestamp(3, Timestamp.from(clock.instant()));
+            ps.setLong(4, userId);
+            ps.setDate(5, Date.valueOf(today));
+            ps.setDate(6, Date.valueOf(today));
+            ps.executeUpdate();
+        }
     }
 }

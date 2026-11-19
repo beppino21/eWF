@@ -134,6 +134,32 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         m_contentUI = ui;
     }
 
+    /** Dettaglio in sola consultazione, aperto da un elenco di processi: "« Lista" torna a quell'elenco. */
+    private void showReadOnlyDetail(long processId, ProcessListUI list) {
+        TaskDetailUI ui = new TaskDetailUI();
+        ui.prepare(processId, new TaskDetailUI.IListener() {
+            @Override public void reactOnBack() {
+                if (list != null) {
+                    list.reload();
+                    m_contentUI = list;
+                } else {
+                    showMenu();
+                }
+            }
+            @Override public void reactOnLogout() { logout(); }
+        }, true);
+        m_contentUI = ui;
+    }
+
+    private void showProcessList(ProcessListUI.Mode mode) {
+        ProcessListUI ui = new ProcessListUI();
+        ui.prepare(mode, new ProcessListUI.IListener() {
+            @Override public void reactOnOpen(long processId) { showReadOnlyDetail(processId, ui); }
+            @Override public void backToMenu() { showMenu(); }
+        });
+        m_contentUI = ui;
+    }
+
     // ------------------------------------------------------------------ menu
 
     private void showMenu() {
@@ -149,6 +175,11 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         IBackToMenu back = this::showMenu;
         switch (choice) {
             case MenuUI.TASKS -> showWorklist();
+            case MenuUI.AUTO_SUBSTITUTION -> {
+                AutoSubstitutionUI ui = new AutoSubstitutionUI();
+                ui.prepare(back);
+                m_contentUI = ui;
+            }
             case MenuUI.SUBSTITUTIONS -> {
                 SubstitutionsUI ui = new SubstitutionsUI();
                 ui.setBack(back);
@@ -158,6 +189,35 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
                 if (!m_admin) return;
                 ErrorsUI ui = new ErrorsUI();
                 ui.prepare(n -> { }, back);
+                m_contentUI = ui;
+            }
+            case MenuUI.PARTICIPATED -> showProcessList(ProcessListUI.Mode.PARTICIPATED);
+            case MenuUI.ADMIN_PROCESSES -> { if (m_admin) showProcessList(ProcessListUI.Mode.ADMIN); }
+            case MenuUI.FORCE_START -> {
+                if (!m_admin) return;
+                ForceStartUI ui = new ForceStartUI();
+                ui.prepare(new ForceStartUI.IListener() {
+                    @Override public void backToMenu() { showMenu(); }
+                    @Override public void reactOnOpen(long processId) { showReadOnlyDetail(processId, null); }
+                });
+                m_contentUI = ui;
+            }
+            case MenuUI.ADMIN_SUBSTITUTIONS -> {
+                if (!m_admin) return;
+                AdminSubstitutionsUI ui = new AdminSubstitutionsUI();
+                ui.prepare(back);
+                m_contentUI = ui;
+            }
+            case MenuUI.TEAMS -> {
+                if (!m_admin) return;
+                TeamsUI ui = new TeamsUI();
+                ui.prepare(back);
+                m_contentUI = ui;
+            }
+            case MenuUI.USERS -> {
+                if (!m_admin) return;
+                UsersUI ui = new UsersUI();
+                ui.prepare(back);
                 m_contentUI = ui;
             }
             case MenuUI.PASSWORD -> {

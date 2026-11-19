@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="l_1" beanbinding="#{d.ProcessListUI}" />
+<t:rowtitlebar id="l_2" text="#{d.ProcessListUI.title}" />
+<t:rowheader id="l_3" coldistance="6" >
+<t:button id="l_3m" actionListener="#{d.ProcessListUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="l_3md" width="12" />
+<t:button id="l_3a" actionListener="#{d.ProcessListUI.onRunning}" background="#{d.ProcessListUI.runningBg}" text="In corso" width="90" />
+<t:button id="l_3b" actionListener="#{d.ProcessListUI.onClosed}" background="#{d.ProcessListUI.closedBg}" text="Conclusi" width="90" />
+<t:button id="l_3c" actionListener="#{d.ProcessListUI.onAll}" background="#{d.ProcessListUI.allBg}" text="Tutti" width="70" />
+<t:coldistance id="l_3sd" rendered="#{d.ProcessListUI.adminMode}" width="20" />
+<t:field id="l_3s" actionListener="#{d.ProcessListUI.onSearch}" rendered="#{d.ProcessListUI.adminMode}" text="#{d.ProcessListUI.search}" tooltip="Documento, processo, testo o richiedente (Invio per cercare)" width="200" />
+<t:button id="l_3sb" actionListener="#{d.ProcessListUI.onSearch}" rendered="#{d.ProcessListUI.adminMode}" text="Cerca" width="70" />
+<t:coldistance id="l_3rd" width="12" />
+<t:link id="l_3r" actionListener="#{d.ProcessListUI.onResetFilters}" rendered="#{d.ProcessListUI.filtered}" text="Togli filtri" />
+<t:coldistance id="l_3d" width="100%" />
+<t:button id="l_3f" actionListener="#{d.ProcessListUI.onRefresh}" text="Aggiorna" width="80" />
+</t:rowheader>
+<t:rowdistance id="l_4" height="10" />
+<t:rowbodypane id="l_5" >
+<t:row id="l_6" >
+<t:label id="l_6l" font="weight:bold" text="#{d.ProcessListUI.status}" />
+<t:coldistance id="l_6c" width="100%" />
+<t:link id="l_6y" actionListener="#{d.ProcessListUI.grid.onOpenGridExportFunctions}" text="Export" />
+</t:row>
+<t:rowdistance id="l_7" height="6" />
+<t:row id="l_8" >
+<t:fixgrid id="l_g" avoidrowstretching="true" height="100%" objectbinding="#{d.ProcessListUI.grid}" sbvisibleamount="20" width="100%" >
+<t:gridheader id="l_gh" rendered="true" rowheight="30" >
+<t:field id="l_h1" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterProcess}" />
+<t:field id="l_h2" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterDocument}" />
+<t:label id="l_hb" background="#C0C0C0" />
+<t:field id="l_h3" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterSummary}" />
+<t:field id="l_h4" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterState}" />
+<t:field id="l_h5" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterStarted}" />
+<t:field id="l_h6" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterEnded}" />
+<t:field id="l_h7" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterStarter}" />
+<t:field id="l_h8" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.ProcessListUI.userMode}" text="#{d.ProcessListUI.filterRole}" />
+<t:field id="l_h9" actionListener="#{d.ProcessListUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.ProcessListUI.filterWhere}" />
+<t:label id="l_h10" background="#C0C0C0" />
+<t:label id="l_h11" background="#C0C0C0" rendered="#{d.ProcessListUI.adminMode}" />
+</t:gridheader>
+<t:gridcol id="l_c1" text="Processo" width="170" >
+<t:label id="l_c1l" text=".{process}" />
+</t:gridcol>
+<t:gridcol id="l_c2" text="Documento" width="100" >
+<t:label id="l_c2l" font="weight:bold" text=".{document}" />
+</t:gridcol>
+<t:gridcol id="l_cb" text="" width="290" >
+<t:pane id="l_cbp" width="100%" >
+<t:row id="l_cbr" coldistance="4" >
+<t:button id="l_cb1" actionListener=".{onAttachments}" background=".{attachmentsBg}" enabled=".{attachmentsEnabled}" font="size:10" text=".{attachmentsText}" width="85" />
+<t:button id="l_cb2" actionListener=".{onComments}" background=".{commentsBg}" enabled=".{commentsEnabled}" font="size:10" text=".{commentsText}" width="95" />
+<t:button id="l_cb3" actionListener=".{onHistory}" background=".{historyBg}" enabled=".{historyEnabled}" font="size:10" text=".{historyText}" width="85" />
+</t:row>
+</t:pane>
+</t:gridcol>
+<t:gridcol id="l_c3" text="Riepilogo" width="260" >
+<t:label id="l_c3l" text=".{summary}" />
+</t:gridcol>
+<t:gridcol id="l_c4" text="Stato" width="100" >
+<t:label id="l_c4l" align="center" background=".{stateColor}" text=".{state}" />
+</t:gridcol>
+<t:gridcol id="l_c5" sortreference=".{startedSort}" text="Avviato il" width="90" >
+<t:label id="l_c5l" text=".{started}" />
+</t:gridcol>
+<t:gridcol id="l_c6" sortreference=".{endedSort}" text="Chiuso il" width="90" >
+<t:label id="l_c6l" text=".{ended}" />
+</t:gridcol>
+<t:gridcol id="l_c7" text="Avviato da" width="140" >
+<t:label id="l_c7l" text=".{starter}" />
+</t:gridcol>
+<t:gridcol id="l_c8" rendered="#{d.ProcessListUI.userMode}" text="Il mio ruolo" width="160" >
+<t:label id="l_c8l" text=".{role}" />
+</t:gridcol>
+<t:gridcol id="l_c9" text="Dove si trova" width="100%" >
+<t:label id="l_c9l" text=".{where}" />
+</t:gridcol>
+<t:gridcol id="l_c10" text="" width="70" >
+<t:button id="l_c10b" actionListener=".{onOpen}" text="Apri" width="60" />
+</t:gridcol>
+<t:gridcol id="l_c11" rendered="#{d.ProcessListUI.adminMode}" text="" width="90" >
+<t:button id="l_c11b" actionListener=".{onCancel}" foreground="#B00020" rendered=".{cancellable}" text="Annulla" width="80" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

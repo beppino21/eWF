@@ -9,7 +9,7 @@ import it.eone.ewf.service.ServiceException;
 import it.eone.ewf.service.Views.Column;
 import it.eone.ewf.service.Views.Light;
 import it.eone.ewf.service.Views.Reason;
-import it.eone.ewf.service.Views.TypeCount;
+import it.eone.ewf.service.Views.InfoCounts;
 import it.eone.ewf.service.Views.WorkItem;
 import it.eone.ewf.service.Views.Worklist;
 import it.eone.ewf.service.Views.WorklistFilter;
@@ -19,13 +19,18 @@ import org.eclnt.jsfserver.defaultscreens.ModalPopup;
 import org.eclnt.jsfserver.defaultscreens.Statusbar;
 import org.eclnt.jsfserver.elements.impl.FIXGRIDItem;
 import org.eclnt.jsfserver.elements.impl.FIXGRIDListBinding;
-import org.eclnt.jsfserver.elements.util.ValidValuesBinding;
 import org.eclnt.jsfserver.pagebean.PageBean;
 
 import java.io.Serializable;
 import java.time.Duration;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Lista delle attivita' dell'utente: proprie, da sostituto, di team. Semaforo dei giorni di attesa, filtro per
@@ -46,11 +51,14 @@ public class WorklistUI extends PageBean implements Serializable {
 
     private IListener m_listener;
     private final FIXGRIDListBinding<Item> m_grid = new FIXGRIDListBinding<>();
-    private final ValidValuesBinding m_typesVVB = new ValidValuesBinding();
-    private String m_type;
-    private String m_text;
     private String m_status = "";
     private List<Column> m_columns = List.of();
+    /** Filtri per colonna (riga sotto le intestazioni, come nel ticketing): chiave = nome della colonna. */
+    private final Map<String, String> m_filters = new HashMap<>();
+    /** Colonne specifiche per tipo di processo, lette una volta per tipo. */
+    private final Map<String, List<Column>> m_columnsByType = new HashMap<>();
+    /** Quanto c'e' da vedere per processo (pulsanti Allegati / Commenti / Storico). */
+    private Map<Long, InfoCounts> m_counts = Map.of();
 
     public WorklistUI() {
         SessionGuard.requireUser("/Worklist.xml");
@@ -64,28 +72,60 @@ public class WorklistUI extends PageBean implements Serializable {
         reload();
     }
 
-    /** Rilegge dal database mantenendo filtri e ricerca. */
+    /** Rilegge dal database e riapplica i filtri per colonna. */
     public void reload() {
         EwfService svc = EwfApp.get().service();
         try {
-            Worklist w = svc.worklist(EwfSession.instance().userId(), new WorklistFilter(m_type, m_text));
-            m_typesVVB.clear();
-            for (TypeCount t : w.typeCounts())
-                m_typesVVB.addValidValue(t.processType(), (t.text() == null ? t.processType() : t.text()) + " (" + t.count() + ")");
-            if (m_type != null && w.typeCounts().stream().noneMatch(t -> t.processType().equals(m_type))) {
-                m_type = null;                                       // il tipo filtrato non ha piu' attivita'
-                w = svc.worklist(EwfSession.instance().userId(), new WorklistFilter(null, m_text));
-            }
-            m_columns = m_type == null ? List.of() : svc.columns(m_type);
+            Worklist w = svc.worklist(EwfSession.instance().userId(), WorklistFilter.all());
+            // 1. filtri sulle colonne fisse
+            List<WorkItem> rows = new ArrayList<>();
+            for (WorkItem i : w.items()) if (matches(new Item(i), FIXED)) rows.add(i);
+            // 2. se resta un solo tipo di processo compaiono le sue colonne, filtrabili anch'esse
+            Set<String> types = new HashSet<>();
+            for (WorkItem i : rows) types.add(i.processType());
+            m_columns = types.size() == 1
+                    ? m_columnsByType.computeIfAbsent(types.iterator().next(), svc::columns) : List.of();
             m_grid.getItems().clear();
-            for (WorkItem i : w.items()) m_grid.getItems().add(new Item(i));
-            int total = w.typeCounts().stream().mapToInt(TypeCount::count).sum();
-            m_status = w.items().size() == total ? total + " attivita'" : w.items().size() + " di " + total + " attivita'";
+            List<Long> ids = new ArrayList<>();
+            for (WorkItem i : rows) {
+                Item it = new Item(i);
+                if (!m_columns.isEmpty() && !matches(it, DYNAMIC)) continue;
+                m_grid.getItems().add(it);
+                ids.add(i.processId());
+            }
+            m_counts = svc.infoCounts(EwfSession.instance().userId(), ids);
+            int total = w.items().size(), shown = m_grid.getItems().size();
+            m_status = shown == total ? total + " attivita'" : shown + " di " + total + " attivita'";
         } catch (ServiceException e) {
             m_grid.getItems().clear();
             m_status = "";
             Statusbar.outputError(e.getMessage());
         }
+    }
+
+    private static final List<String> FIXED = List.of("days", "process", "document", "summary", "task", "forWhom",
+            "starter", "value", "since");
+    private static final List<String> DYNAMIC = List.of("col1", "col2", "col3", "col4", "col5", "col6");
+
+    private boolean matches(Item it, List<String> keys) {
+        for (String k : keys) {
+            String f = m_filters.get(k);
+            if (f == null || f.isBlank()) continue;
+            String v = switch (k) {
+                case "days" -> it.getDays();
+                case "process" -> it.getProcessType();
+                case "document" -> it.getDocument();
+                case "summary" -> it.getSummary();
+                case "task" -> it.getTaskText();
+                case "forWhom" -> it.getForWhom();
+                case "starter" -> it.getStarter();
+                case "value" -> it.getValue();
+                case "since" -> it.getSince();
+                default -> it.col(Integer.parseInt(k.substring(3)) - 1);
+            };
+            if (v == null || !v.toLowerCase(Locale.ITALY).contains(f.trim().toLowerCase(Locale.ITALY))) return false;
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------ azioni
@@ -107,11 +147,10 @@ public class WorklistUI extends PageBean implements Serializable {
             default -> { }
         }
     }
-    public void onFilter(ActionEvent ae) { reload(); }
+    public void onColFilter(ActionEvent ae) { reload(); }
 
     public void onResetFilters(ActionEvent ae) {
-        m_type = null;
-        m_text = null;
+        m_filters.clear();
         reload();
     }
 
@@ -122,11 +161,38 @@ public class WorklistUI extends PageBean implements Serializable {
     // ------------------------------------------------------------------ binding
 
     public FIXGRIDListBinding<Item> getGrid() { return m_grid; }
-    public ValidValuesBinding getTypesVVB() { return m_typesVVB; }
-    public String getType() { return m_type; }
-    public void setType(String v) { m_type = v == null || v.isBlank() ? null : v; }
-    public String getText() { return m_text; }
-    public void setText(String v) { m_text = v; }
+    /** Valori dei filtri per colonna (un campo sotto ogni intestazione). */
+    public String getFilterDays() { return m_filters.get("days"); }
+    public void setFilterDays(String v) { m_filters.put("days", v); }
+    public String getFilterProcess() { return m_filters.get("process"); }
+    public void setFilterProcess(String v) { m_filters.put("process", v); }
+    public String getFilterDocument() { return m_filters.get("document"); }
+    public void setFilterDocument(String v) { m_filters.put("document", v); }
+    public String getFilterSummary() { return m_filters.get("summary"); }
+    public void setFilterSummary(String v) { m_filters.put("summary", v); }
+    public String getFilterTask() { return m_filters.get("task"); }
+    public void setFilterTask(String v) { m_filters.put("task", v); }
+    public String getFilterForWhom() { return m_filters.get("forWhom"); }
+    public void setFilterForWhom(String v) { m_filters.put("forWhom", v); }
+    public String getFilterStarter() { return m_filters.get("starter"); }
+    public void setFilterStarter(String v) { m_filters.put("starter", v); }
+    public String getFilterValue() { return m_filters.get("value"); }
+    public void setFilterValue(String v) { m_filters.put("value", v); }
+    public String getFilterSince() { return m_filters.get("since"); }
+    public void setFilterSince(String v) { m_filters.put("since", v); }
+    public String getFilterCol1() { return m_filters.get("col1"); }
+    public void setFilterCol1(String v) { m_filters.put("col1", v); }
+    public String getFilterCol2() { return m_filters.get("col2"); }
+    public void setFilterCol2(String v) { m_filters.put("col2", v); }
+    public String getFilterCol3() { return m_filters.get("col3"); }
+    public void setFilterCol3(String v) { m_filters.put("col3", v); }
+    public String getFilterCol4() { return m_filters.get("col4"); }
+    public void setFilterCol4(String v) { m_filters.put("col4", v); }
+    public String getFilterCol5() { return m_filters.get("col5"); }
+    public void setFilterCol5(String v) { m_filters.put("col5", v); }
+    public String getFilterCol6() { return m_filters.get("col6"); }
+    public void setFilterCol6(String v) { m_filters.put("col6", v); }
+    public boolean isFiltered() { return m_filters.values().stream().anyMatch(v -> v != null && !v.isBlank()); }
     public String getStatus() { return m_status; }
     public String getUserLabel() {
         var u = EwfSession.instance().user();
@@ -155,6 +221,7 @@ public class WorklistUI extends PageBean implements Serializable {
     // ------------------------------------------------------------------ riga
 
     private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final String HIGHLIGHT = "#BBDEFB";
 
     /** Storico, Gantt, Commenti e Allegati in una finestra sopra la lista, senza aprire il dettaglio. */
     private void openInfo(WorkItem w, ProcessInfoUI.Mode mode) {
@@ -180,6 +247,18 @@ public class WorklistUI extends PageBean implements Serializable {
         public void onComments(ActionEvent ae) { openInfo(w, ProcessInfoUI.Mode.COMMENTS); }
 
         public void onOpen(ActionEvent ae) { onRowExecute(); }
+
+        private InfoCounts counts() { return m_counts.getOrDefault(w.processId(), InfoCounts.NONE); }
+        /** -1 = allegati nel sistema di origine: non si sanno contare senza chiamarlo, il pulsante resta attivo. */
+        public boolean isAttachmentsEnabled() { return counts().attachments() != 0; }
+        public boolean isCommentsEnabled() { return counts().comments() > 0; }
+        public boolean isHistoryEnabled() { return counts().history() > 0; }
+        public String getAttachmentsText() { int n = counts().attachments(); return n > 0 ? "Allegati (" + n + ")" : "Allegati"; }
+        public String getCommentsText() { int n = counts().comments(); return n > 0 ? "Commenti (" + n + ")" : "Commenti"; }
+        public String getHistoryText() { int n = counts().history(); return n > 0 ? "Storico (" + n + ")" : "Storico"; }
+        public String getAttachmentsBg() { return counts().attachments() > 0 ? HIGHLIGHT : null; }
+        public String getCommentsBg() { return counts().comments() > 0 ? HIGHLIGHT : null; }
+        public String getHistoryBg() { return counts().history() > 0 ? HIGHLIGHT : null; }
 
         public String getDays() { return String.valueOf(w.daysWaiting()); }
         public int getDaysSort() { return w.daysWaiting(); }
@@ -210,7 +289,7 @@ public class WorklistUI extends PageBean implements Serializable {
         public String getCol5() { return col(4); }
         public String getCol6() { return col(5); }
 
-        private String col(int i) {
+        String col(int i) {
             if (i >= m_columns.size()) return "";
             String v = w.attributes().get(m_columns.get(i).key());
             return v == null ? "" : v;

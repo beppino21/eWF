@@ -6,11 +6,7 @@
 <t:rowheader id="w_3" >
 <t:button id="w_3m" actionListener="#{d.WorklistUI.onBackToMenu}" text="« Menu" width="80" />
 <t:coldistance id="w_3md" width="12" />
-<t:combobox id="w_3t" actionListener="#{d.WorklistUI.onFilter}" flush="true" validvaluesbinding="#{d.WorklistUI.typesVVB}" value="#{d.WorklistUI.type}" width="280" withnullitem="true" />
-<t:coldistance id="w_3b" width="8" />
-<t:field id="w_3s" actionListener="#{d.WorklistUI.onFilter}" flush="true" flushtimer="800" text="#{d.WorklistUI.text}" width="200" />
-<t:coldistance id="w_3c" width="8" />
-<t:link id="w_3r" actionListener="#{d.WorklistUI.onResetFilters}" text="Togli filtri" />
+<t:link id="w_3r" actionListener="#{d.WorklistUI.onResetFilters}" rendered="#{d.WorklistUI.filtered}" text="Togli filtri" />
 <t:coldistance id="w_3d" width="100%" />
 <t:button id="w_3f" actionListener="#{d.WorklistUI.onRefresh}" text="Aggiorna" width="80" />
 </t:rowheader>
@@ -25,6 +21,25 @@
 </t:row>
 <t:row id="w_7" >
 <t:fixgrid id="w_g" height="100%" objectbinding="#{d.WorklistUI.grid}" persistid="EWF_WORKLIST_GRID" sbvisibleamount="30" width="100%" >
+<t:gridheader id="w_gh" rendered="true" rowheight="30" >
+<t:field id="w_h0" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterDays}" />
+<t:field id="w_h1" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterProcess}" />
+<t:field id="w_h2" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterDocument}" />
+<t:label id="w_hb" background="#C0C0C0" />
+<t:field id="w_h3" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.summaryVisible}" text="#{d.WorklistUI.filterSummary}" />
+<t:field id="w_hx1" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.col1}" text="#{d.WorklistUI.filterCol1}" />
+<t:field id="w_hx2" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.col2}" text="#{d.WorklistUI.filterCol2}" />
+<t:field id="w_hx3" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.col3}" text="#{d.WorklistUI.filterCol3}" />
+<t:field id="w_hx4" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.col4}" text="#{d.WorklistUI.filterCol4}" />
+<t:field id="w_hx5" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.col5}" text="#{d.WorklistUI.filterCol5}" />
+<t:field id="w_hx6" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" rendered="#{d.WorklistUI.col6}" text="#{d.WorklistUI.filterCol6}" />
+<t:field id="w_h4" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterTask}" />
+<t:field id="w_h5" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterForWhom}" />
+<t:field id="w_h6" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterStarter}" />
+<t:field id="w_h7" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterValue}" />
+<t:field id="w_h8" actionListener="#{d.WorklistUI.onColFilter}" background="#b4c6e7" flush="true" flushtimer="800" text="#{d.WorklistUI.filterSince}" />
+<t:label id="w_h9" background="#C0C0C0" />
+</t:gridheader>
 <t:gridcol id="w_c0" sortreference=".{daysSort}" text="Giorni" width="60" >
 <t:label id="w_c0l" align="center" background=".{lightColor}" font="weight:bold" text=".{days}" />
 </t:gridcol>
@@ -34,12 +49,12 @@
 <t:gridcol id="w_c2" text="Documento" width="100" >
 <t:label id="w_c2l" font="weight:bold" text=".{document}" />
 </t:gridcol>
-<t:gridcol id="w_cb" text="" width="250" >
+<t:gridcol id="w_cb" text="" width="290" >
 <t:pane id="w_cbp" width="100%" >
 <t:row id="w_cbr" coldistance="4" >
-<t:button id="w_cb1" actionListener=".{onAttachments}" font="size:10" text="Allegati" width="75" />
-<t:button id="w_cb2" actionListener=".{onHistory}" font="size:10" text="Storico" width="75" />
-<t:button id="w_cb3" actionListener=".{onComments}" font="size:10" text="Commenti" width="80" />
+<t:button id="w_cb1" actionListener=".{onAttachments}" background=".{attachmentsBg}" enabled=".{attachmentsEnabled}" font="size:10" text=".{attachmentsText}" width="85" />
+<t:button id="w_cb3" actionListener=".{onComments}" background=".{commentsBg}" enabled=".{commentsEnabled}" font="size:10" text=".{commentsText}" width="95" />
+<t:button id="w_cb2" actionListener=".{onHistory}" background=".{historyBg}" enabled=".{historyEnabled}" font="size:10" text=".{historyText}" width="85" />
 </t:row>
 </t:pane>
 </t:gridcol>

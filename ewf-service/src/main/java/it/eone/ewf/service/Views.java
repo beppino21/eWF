@@ -62,6 +62,23 @@ public final class Views {
 
     public record Comment(long id, String author, String text, Instant createdAt, boolean mine) {}
 
+    /** Filtro di "Processi a cui ho partecipato". */
+    public enum ParticipationFilter { RUNNING, CLOSED, ALL }
+
+    /** Un processo a cui l'utente ha partecipato. myRole: "avviato, approvato, commentato"...; openTasks: dove e' fermo. */
+    public record ParticipatedProcess(long processId, String processType, String processTypeText, String docType,
+                                      String documentKey, String summary, Money value, String status,
+                                      Instant startedAt, Instant endedAt, String starter, String myRole,
+                                      String openTasks) {}
+
+    /**
+     * Quanto c'e' da vedere per un processo, per i pulsanti in lista. attachments = -1: gli allegati stanno
+     * nel sistema di origine (es. SAP) e contarli richiederebbe una chiamata per riga, quindi non si sa.
+     */
+    public record InfoCounts(int attachments, int comments, int history) {
+        public static final InfoCounts NONE = new InfoCounts(0, 0, 0);
+    }
+
     /**
      * Una barra del Gantt di un processo. who: chi ha agito o, se il task e' ancora aperto, a chi e' assegnato
      * (persona o "Team X"). status come HistoryEntry, piu' OPEN/EXECUTING per i task in corso e START per

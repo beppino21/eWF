@@ -207,6 +207,143 @@ public class EwfServicePostgresTest {
                 subst().canManage(NERI), "senza indicazione sull'utente vale la sua classe");
     }
 
+    @Test
+    void autoSostituzioneComeNelTicketingUnSoloSostituto() {
+        sql("UPDATE ewf_org.app_user SET can_substitute = true WHERE id = " + ROSSI);
+        LocalDate today = LocalDate.of(2026, 11, 6);
+        sql("INSERT INTO ewf_org.substitution (user_id, substitute_id, valid_from, valid_to) VALUES ("
+                + ROSSI + ", " + BIANCHI + ", DATE '2026-11-01', DATE '2026-11-10')");
+        subst().add(ROSSI, NERI, today.plusDays(20), today.plusDays(25));
+
+        // nuovo sostituto: quella in corso si chiude a ieri, la futura sparisce, la nuova parte da oggi
+        SubstitutionService.Substitution s = subst().setMine(ROSSI, NERI, LocalDate.of(2026, 11, 1), today.plusDays(3));
+        assertEquals(today, s.from(), "con una sostituzione in corso un inizio passato diventa oggi");
+        assertEquals(1, subst().mine(ROSSI).size());
+        assertEquals("1", value("SELECT count(*)::text FROM ewf_org.substitution WHERE user_id = " + ROSSI
+                + " AND valid_to = DATE '2026-11-05'"), "lo storico resta");
+
+        subst().clearMine(ROSSI);
+        assertTrue(subst().mine(ROSSI).isEmpty());
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class,
+                () -> subst().setMine(ROSSI, NERI, today.minusDays(2), today)).code(), "senza sostituzione in corso niente passato");
+    }
+
+    @Test
+    void contatoriPerIPulsantiInLista() {
+        long p = atApproval("4500009004");
+        svc.addComment(BIANCHI, p, "Verificare il prezzo");
+        Map<Long, InfoCounts> m = svc.infoCounts(BIANCHI, List.of(p));
+        assertEquals(1, m.get(p).comments());
+        assertEquals(1, m.get(p).history(), "lo step 10 e' chiuso");
+        assertTrue(svc.infoCounts(NERI, List.of(p)).isEmpty(), "chi non vede il processo non vede nemmeno i contatori");
+    }
+
+    // ------------------------------------------------------------------ processi a cui ho partecipato
+
+    @Test
+    void processiACuiHoPartecipatoInCorsoEConclusi() {
+        long p1 = atApproval("4500009101");                         // ROSSI avvia e approva lo step 10
+        long p2 = start("4500009102");
+        admin().cancel(VERDI, p2, "doppione");                       // p2 chiuso
+        List<ParticipatedProcess> all = svc.participated(ROSSI, ParticipationFilter.ALL);
+        assertEquals(2, all.size());
+        assertEquals(List.of(p1), svc.participated(ROSSI, ParticipationFilter.RUNNING).stream().map(ParticipatedProcess::processId).toList());
+        assertEquals(List.of(p2), svc.participated(ROSSI, ParticipationFilter.CLOSED).stream().map(ParticipatedProcess::processId).toList());
+        ParticipatedProcess r = all.stream().filter(x -> x.processId() == p1).findFirst().orElseThrow();
+        assertTrue(r.myRole().contains("avviato") && r.myRole().contains("approvato"), r.myRole());
+        assertEquals("Approvazione responsabile", r.openTasks());
+        assertTrue(svc.participated(BIANCHI, ParticipationFilter.ALL).isEmpty(), "BIANCHI non ha ancora fatto nulla");
+        svc.addComment(BIANCHI, p1, "Verifico");
+        assertEquals("commentato", svc.participated(BIANCHI, ParticipationFilter.ALL).get(0).myRole());
+    }
+
+    // ------------------------------------------------------------------ funzioni da amministratore
+
+    @Test
+    void amministratoreVedeTuttiIProcessiEAnnullaConNota() {
+        long p = atApproval("4500009103");
+        assertTrue(svc.canView(VERDI, p), "l'amministratore consulta qualsiasi processo");
+        assertFalse(svc.canView(NERI, p));
+        assertEquals(1, admin().processes(VERDI, ParticipationFilter.RUNNING, "009103").size());
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> admin().cancel(VERDI, p, " ")).code());
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> admin().cancel(BIANCHI, p, "x")).code());
+        admin().cancel(VERDI, p, "OdA annullato in SAP");
+        assertEquals("CANCELLED", value("SELECT status FROM ewf_core.process_instance WHERE id = " + p));
+        assertTrue(svc.worklist(BIANCHI, WorklistFilter.all()).items().isEmpty(), "il task aperto e' sparito");
+    }
+
+    @Test
+    void avvioForzatoSoloPerProcessiAmmessiDalTipoDocumento() {
+        assertEquals(List.of("F"), admin().docTypes(VERDI));
+        assertEquals(List.of(ODA), admin().startableTypes(VERDI, "F").stream().map(AdminService.StartableType::code).toList());
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class,
+                () -> admin().forceStart(VERDI, "X", "4500009104", ODA)).code(), "processo non ammesso per il tipo documento");
+        long p = admin().forceStart(VERDI, "F", " 4500009104 ", ODA);
+        assertEquals(String.valueOf(VERDI), value("SELECT started_by::text FROM ewf_core.process_instance WHERE id = " + p));
+        assertEquals("4500009104", value("SELECT document_key FROM ewf_core.process_instance WHERE id = " + p));
+        assertThrows(ServiceException.class, () -> admin().forceStart(VERDI, "F", "4500009104", ODA), "doppione");
+    }
+
+    @Test
+    void sostituzioneGeneralizzataDaParteDellAmministratore() {
+        LocalDate today = LocalDate.of(2026, 11, 6);
+        SubstitutionService.Substitution s = admin().addSubstitution(VERDI, NERI, BIANCHI, today, today.plusDays(2));
+        assertEquals(String.valueOf(VERDI), value("SELECT changed_by::text FROM ewf_org.substitution WHERE id = " + s.id()),
+                "registrato chi l'ha decisa");
+        assertEquals(1, admin().allSubstitutions(VERDI).size());
+        admin().removeSubstitution(VERDI, s.id());
+        assertTrue(admin().allSubstitutions(VERDI).isEmpty());
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class,
+                () -> admin().addSubstitution(BIANCHI, NERI, ROSSI, today, today)).code());
+    }
+
+    @Test
+    void gestioneUtenti() {
+        long id = admin().saveUser(VERDI, new AdminService.UserEdit(null, " G.Gialli ", "Giulia Gialli", "g@x.it", "ggialli", null, true, true));
+        assertEquals("g.gialli", value("SELECT login FROM ewf_org.app_user WHERE id = " + id));
+        assertEquals("GGIALLI", value("SELECT sap_user FROM ewf_org.app_user WHERE id = " + id));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> admin().saveUser(VERDI,
+                new AdminService.UserEdit(null, "g.gialli", "Altra", null, null, null, null, true))).code(), "login doppio");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> admin().saveUser(VERDI,
+                new AdminService.UserEdit(VERDI, null, "Luca Verdi", null, null, null, null, false))).code(), "non disattiva se stesso");
+        String pwd = admin().resetPassword(VERDI, id);
+        assertTrue(pwd.length() >= 12);
+        sql("UPDATE ewf_org.app_user SET failed_logins = 5, locked_until = now() + interval '1 hour' WHERE id = " + id);
+        assertTrue(admin().users(VERDI).stream().anyMatch(u -> u.id() == id && u.locked()));
+        admin().unlock(VERDI, id);
+        assertTrue(admin().users(VERDI).stream().anyMatch(u -> u.id() == id && !u.locked()));
+        admin().saveUser(VERDI, new AdminService.UserEdit(id, null, "Giulia Gialli", null, null, null, false, false));
+        assertEquals("false", value("SELECT active::text FROM ewf_org.app_user WHERE id = " + id));
+        assertTrue(admin().users(VERDI).stream().anyMatch(u -> u.id() == VERDI && u.teams().contains("WFADM")));
+    }
+
+    @Test
+    void teamEAppartenenzeConValidita() {
+        LocalDate today = LocalDate.of(2026, 11, 6);
+        admin().saveTeam(VERDI, " acq_nord ", "Acquisti Nord", true);
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> admin().saveTeam(VERDI, "ACQ_NORD", "x", true)).code());
+        admin().setMember(VERDI, "ACQ_NORD", NERI, today.minusDays(5), null);
+        admin().setMember(VERDI, "ACQ_NORD", BIANCHI, today.plusDays(10), null);       // futuro
+        assertEquals(1, admin().teams(VERDI).stream().filter(t -> t.code().equals("ACQ_NORD")).findFirst().orElseThrow().activeMembers());
+        admin().endMember(VERDI, "ACQ_NORD", NERI);
+        admin().endMember(VERDI, "ACQ_NORD", BIANCHI);
+        List<AdminService.Membership> m = admin().members(VERDI, "ACQ_NORD");
+        assertEquals(1, m.size(), "l'appartenenza futura si cancella, quella iniziata resta nello storico");
+        assertEquals(today.minusDays(1), m.get(0).to());
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> admin().endMember(VERDI, "WFADM", VERDI)).code(),
+                "l'amministratore non si toglie da solo");
+        sql("UPDATE ewf_org.team_member SET valid_to = DATE '2026-11-01' WHERE team_code = 'WFADM' AND user_id <> " + VERDI);
+        admin().setMember(VERDI, "WFADM", ROSSI, today, null);
+        assertTrue(admin().isAdmin(ROSSI));
+        admin().endMember(ROSSI, "WFADM", VERDI);                                       // resta ROSSI
+        assertFalse(admin().isAdmin(VERDI));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> admin().endMember(ROSSI, "WFADM", ROSSI)).code());
+        ServiceException last = assertThrows(ServiceException.class,
+                () -> admin().setMember(ROSSI, "WFADM", ROSSI, today.plusDays(5), null));
+        assertTrue(last.getMessage().contains("almeno un amministratore"), "senza amministratori attivi la modifica si annulla");
+        assertTrue(admin().isAdmin(ROSSI), "la modifica rifiutata non ha lasciato traccia");
+    }
+
     // ------------------------------------------------------------------ amministrazione
 
     AdminService admin() { return new AdminService(engine, db, "WFADM", clock, ROME); }

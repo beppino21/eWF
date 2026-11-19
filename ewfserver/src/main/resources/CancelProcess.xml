@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="x_0" beanbinding="#{d.CancelProcessUI}" />
+<t:rowbodypane id="x_1" padding="14" rowdistance="8" >
+<t:row id="x_2" >
+<t:label id="x_2l" font="weight:bold" text="#{d.CancelProcessUI.title}" />
+</t:row>
+<t:row id="x_3" >
+<t:textpane id="x_3t" foreground="#B00020" text="Il processo viene chiuso in eWF e i task aperti spariscono dalle liste. Nel sistema di origine il documento resta com'e' (es. OdA ancora bloccato): va gestito li'." width="100%" />
+</t:row>
+<t:row id="x_4" >
+<t:textarea id="x_4a" height="70" labeltext="Motivo (obbligatorio)" text="#{d.CancelProcessUI.note}" width="100%" />
+</t:row>
+<t:row id="x_5" coldistance="8" >
+<t:coldistance id="x_5d" width="100%" />
+<t:button id="x_5n" actionListener="#{d.CancelProcessUI.onAbort}" text="Non annullare" width="120" />
+<t:button id="x_5y" actionListener="#{d.CancelProcessUI.onConfirm}" text="Annulla il processo" width="160" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

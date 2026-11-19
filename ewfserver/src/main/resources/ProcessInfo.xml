@@ -7,10 +7,10 @@
 <t:rowheader id="p_h" coldistance="6" >
 <t:label id="p_ht" font="weight:bold" text="#{d.ProcessInfoUI.title}" />
 <t:coldistance id="p_hd" width="100%" />
+<t:button id="p_b4" actionListener="#{d.ProcessInfoUI.onShowAttachments}" background="#{d.ProcessInfoUI.attachmentsBg}" text="#{d.ProcessInfoUI.attachmentsText}" width="110+" />
+<t:button id="p_b3" actionListener="#{d.ProcessInfoUI.onShowComments}" background="#{d.ProcessInfoUI.commentsBg}" text="#{d.ProcessInfoUI.commentsText}" width="120+" />
 <t:button id="p_b1" actionListener="#{d.ProcessInfoUI.onShowHistory}" background="#{d.ProcessInfoUI.historyBg}" text="#{d.ProcessInfoUI.historyText}" width="110+" />
 <t:button id="p_b2" actionListener="#{d.ProcessInfoUI.onShowGantt}" background="#{d.ProcessInfoUI.ganttBg}" text="Gantt" width="80" />
-<t:button id="p_b3" actionListener="#{d.ProcessInfoUI.onShowComments}" background="#{d.ProcessInfoUI.commentsBg}" text="#{d.ProcessInfoUI.commentsText}" width="120+" />
-<t:button id="p_b4" actionListener="#{d.ProcessInfoUI.onShowAttachments}" background="#{d.ProcessInfoUI.attachmentsBg}" text="#{d.ProcessInfoUI.attachmentsText}" width="110+" />
 </t:rowheader>
 <t:rowdistance id="p_hd2" height="8" />
 <t:rowbodypane id="p_body" rowdistance="6" >
@@ -39,7 +39,9 @@
 <!-- ===== Gantt ===== -->
 <t:row id="g_1" rendered="#{d.ProcessInfoUI.ganttMode}" >
 <t:scrollpane id="g_sp" height="100%" width="100%" >
-<t:rowdynamiccontent id="g_dc" contentbinding="#{d.ProcessInfoUI.gantt}" />
+<t:row id="g_r" >
+<t:svgviewer id="g_sv" height="#{d.ProcessInfoUI.ganttHeight}" svg="#{d.ProcessInfoUI.ganttSvg}" svgheight="#{d.ProcessInfoUI.ganttHeight}" svgwidth="960" width="960" />
+</t:row>
 </t:scrollpane>
 </t:row>
 

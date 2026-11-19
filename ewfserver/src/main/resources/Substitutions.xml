@@ -2,7 +2,7 @@
 <t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
 
 <t:beanprocessing id="s_1" beanbinding="#{d.SubstitutionsUI}" />
-<t:rowtitlebar id="s_2" text="Auto-sostituzione" />
+<t:rowtitlebar id="s_2" text="Sostituzioni" />
 <t:rowheader id="s_3" >
 <t:button id="s_3m" actionListener="#{d.SubstitutionsUI.onBackToMenu}" text="« Menu" width="80" />
 <t:coldistance id="s_3c" width="100%" />
@@ -14,8 +14,8 @@
 <!-- ===== Chi mi sostituisce ===== -->
 <t:row id="m_r" >
 <t:foldablepane id="m_fp" rowdistance="6" text="#{d.SubstitutionsUI.mineTitle}" width="100%" >
-<t:row id="m_n" rendered="#{d.SubstitutionsUI.readOnlyNoticeVisible}" >
-<t:textpane id="m_nt" foreground="#1565C0" text="Le tue sostituzioni sono gestite dall'amministratore di eWF: per assenze o cambi rivolgiti a lui." width="100%" />
+<t:row id="m_n" >
+<t:textpane id="m_nt" foreground="#1565C0" text="Qui si consultano le sostituzioni. Il tuo sostituto lo indichi da Auto-sostituzione nel menu (se abilitato), altrimenti lo gestisce l'amministratore di eWF." width="100%" />
 </t:row>
 <t:row id="m_gr" >
 <t:fixgrid id="m_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.SubstitutionsUI.mine}" sbvisibleamount="8" width="100%" >
@@ -31,28 +31,10 @@
 <t:gridcol id="m_c4" text="Stato" width="110" >
 <t:label id="m_c4l" align="center" background=".{stateColor}" text=".{state}" />
 </t:gridcol>
-<t:gridcol id="m_c5" rendered="#{d.SubstitutionsUI.canManage}" text="" width="90" >
-<t:button id="m_c5b" actionListener=".{onRemove}" text=".{removeText}" width="80" />
-</t:gridcol>
 <t:gridcol id="m_c6" text="" width="100%" >
 <t:label id="m_c6l" text="" />
 </t:gridcol>
 </t:fixgrid>
-</t:row>
-<t:rowdistance id="m_ad" height="6" rendered="#{d.SubstitutionsUI.canManage}" />
-<t:row id="m_a0" rendered="#{d.SubstitutionsUI.canManage}" >
-<t:label id="m_a0l" font="weight:bold" text="Nuova sostituzione" />
-</t:row>
-<t:row id="m_a1" coldistance="8" rendered="#{d.SubstitutionsUI.canManage}" >
-<t:combobox id="m_a1c" labeltext="Sostituto" validvaluesbinding="#{d.SubstitutionsUI.candidatesVVB}" value="#{d.SubstitutionsUI.substitute}" width="280" withnullitem="true" />
-<t:coldistance id="m_a1d" width="12" />
-<t:calendarfield id="m_a1f" format="date" formatmask="dd/MM/yyyy" labeltext="Dal" timezone="LOCAL" value="#{d.SubstitutionsUI.from}" width="110" />
-<t:calendarfield id="m_a1t" format="date" formatmask="dd/MM/yyyy" labeltext="Al" timezone="LOCAL" value="#{d.SubstitutionsUI.to}" width="110" />
-<t:coldistance id="m_a1e" width="12" />
-<t:button id="m_a1b" actionListener="#{d.SubstitutionsUI.onAdd}" text="Aggiungi" width="90" />
-</t:row>
-<t:row id="m_a2" rendered="#{d.SubstitutionsUI.canManage}" >
-<t:textpane id="m_a2t" font="size:10" foreground="#777777" text="Nel periodo il sostituto vede e firma le tue attivita' (anche quelle gia' in attesa), tu continui a vederle. Una sostituzione in corso si puo' terminare, non cancellare: resta nello storico." width="100%" />
 </t:row>
 </t:foldablepane>
 </t:row>

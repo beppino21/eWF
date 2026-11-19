@@ -50,7 +50,9 @@ import java.util.function.Supplier;
 public final class EwfService {
 
     /** Limiti dell'applicazione. */
-    public record Config(long maxAttachmentBytes, int maxCommentLength) {
+    /** adminTeam: i membri attivi di questo team (amministratori eWF) vedono tutti i processi in consultazione. */
+    public record Config(long maxAttachmentBytes, int maxCommentLength, String adminTeam) {
+        public Config(long maxAttachmentBytes, int maxCommentLength) { this(maxAttachmentBytes, maxCommentLength, "WFADM"); }
         public static Config defaults() { return new Config(20L * 1024 * 1024, 4000); }
     }
 
@@ -222,6 +224,98 @@ public final class EwfService {
      * Linea del tempo del processo per il Gantt: l'avvio e tutti i task, anche quelli ancora aperti,
      * in ordine di arrivo. Stesse regole di visibilita' del dettaglio.
      */
+    /**
+     * Contatori per i pulsanti Allegati / Commenti / Storico della lista: una sola query per tutta la pagina.
+     * Considera solo i processi che l'utente puo' vedere (gli altri restano a zero).
+     */
+    public Map<Long, InfoCounts> infoCounts(long userId, Collection<Long> processIds) {
+        Map<Long, InfoCounts> out = new HashMap<>();
+        if (processIds == null || processIds.isEmpty()) return out;
+        List<Long> visible = processIds.stream().distinct().filter(p -> canView(userId, p)).toList();
+        if (visible.isEmpty()) return out;
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT p.id, pt.attachment_scope,
+                           (SELECT count(*) FROM ewf_core.attachment a
+                             WHERE a.process_id = p.id AND a.provider = 'LOCAL' AND a.deleted_at IS NULL),
+                           (SELECT count(*) FROM ewf_core.comment pc WHERE pc.process_id = p.id),
+                           (SELECT count(*) FROM ewf_core.task_instance t
+                             WHERE t.process_id = p.id AND t.status NOT IN ('OPEN', 'EXECUTING'))
+                      FROM ewf_core.process_instance p
+                      JOIN ewf_core.process_type pt ON pt.code = p.process_type_code
+                     WHERE p.id = ANY (?)""")) {
+                ps.setArray(1, c.createArrayOf("bigint", visible.toArray()));
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        boolean document = "DOCUMENT".equals(rs.getString(2));
+                        out.put(rs.getLong(1), new InfoCounts(document ? -1 : rs.getInt(3), rs.getInt(4), rs.getInt(5)));
+                    }
+                }
+                return out;
+            }
+        });
+    }
+
+    /**
+     * Processi a cui l'utente ha partecipato: avviati da lui, task su cui ha agito (anche come sostituto),
+     * commenti o allegati suoi. Piu' recenti prima, al massimo 500.
+     */
+    public List<ParticipatedProcess> participated(long userId, ParticipationFilter filter) {
+        String status = switch (filter == null ? ParticipationFilter.ALL : filter) {
+            case RUNNING -> " AND p.status IN ('RUNNING','SUSPENDED','COMPLETING','ERROR')";
+            case CLOSED -> " AND p.status NOT IN ('RUNNING','SUSPENDED','COMPLETING','ERROR')";
+            case ALL -> "";
+        };
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT * FROM (
+                      SELECT p.id, p.process_type_code, pt.description AS pt_text, p.doc_type, p.document_key,
+                             p.text AS p_text, p.net_value, p.currency, p.status, p.started_at, p.ended_at,
+                             su.display_name AS starter, pt.list_summary,
+                             ARRAY(SELECT e.key || chr(31) || e.value FROM jsonb_each_text(p.doc_context) e) AS ctx,
+                             (p.started_by = ?) AS i_started,
+                             EXISTS (SELECT 1 FROM ewf_core.task_instance t WHERE t.process_id = p.id AND t.acted_by_id = ? AND t.status = 'OK') AS i_ok,
+                             EXISTS (SELECT 1 FROM ewf_core.task_instance t WHERE t.process_id = p.id AND t.acted_by_id = ? AND t.status = 'KO') AS i_ko,
+                             EXISTS (SELECT 1 FROM ewf_core.task_instance t WHERE t.process_id = p.id AND t.acted_by_id = ? AND t.status NOT IN ('OK','KO')) AS i_other,
+                             EXISTS (SELECT 1 FROM ewf_core.comment pc WHERE pc.process_id = p.id AND pc.author_id = ?) AS i_comment,
+                             EXISTS (SELECT 1 FROM ewf_core.attachment pa WHERE pa.process_id = p.id AND pa.uploaded_by = ?) AS i_attach,
+                             (SELECT string_agg(td.text, ', ' ORDER BY t.step_no) FROM ewf_core.task_instance t
+                                JOIN ewf_core.task_def td ON td.id = t.task_def_id
+                               WHERE t.process_id = p.id AND t.status IN ('OPEN','EXECUTING')) AS open_tasks
+                        FROM ewf_core.process_instance p
+                        JOIN ewf_core.process_type pt ON pt.code = p.process_type_code
+                        LEFT JOIN ewf_org.app_user su ON su.id = p.started_by
+                       WHERE 1 = 1""" + status + """
+                    ) x
+                    WHERE i_started OR i_ok OR i_ko OR i_other OR i_comment OR i_attach
+                    ORDER BY started_at DESC, id DESC
+                    LIMIT 500""")) {
+                for (int i = 1; i <= 6; i++) ps.setLong(i, userId);
+                List<ParticipatedProcess> out = new ArrayList<>();
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        Money value = money(rs);
+                        Map<String, String> attrs = attributes(rs, value);
+                        String summary = SummaryTemplate.render(rs.getString("list_summary"), attrs);
+                        if (summary == null) summary = rs.getString("p_text");
+                        List<String> roles = new ArrayList<>();
+                        if (rs.getBoolean("i_started")) roles.add("avviato");
+                        if (rs.getBoolean("i_ok")) roles.add("approvato");
+                        if (rs.getBoolean("i_ko")) roles.add("respinto");
+                        if (rs.getBoolean("i_other")) roles.add("gestito");
+                        if (rs.getBoolean("i_comment")) roles.add("commentato");
+                        if (rs.getBoolean("i_attach")) roles.add("allegato");
+                        out.add(new ParticipatedProcess(rs.getLong("id"), rs.getString("process_type_code"),
+                                rs.getString("pt_text"), rs.getString("doc_type"), rs.getString("document_key"),
+                                summary, value, rs.getString("status"), instant(rs, "started_at"), instant(rs, "ended_at"),
+                                rs.getString("starter"), String.join(", ", roles), rs.getString("open_tasks")));
+                    }
+                }
+                return out;
+            }
+        });
+    }
+
     public List<TimelineBar> timeline(long userId, long processId) {
         requireView(userId, processId);
         Header h = header(processId);
@@ -759,6 +853,7 @@ public final class EwfService {
         Set<Long> ids = new HashSet<>(users.substitutedBy(userId, today));
         ids.add(userId);
         Set<String> teams = users.teamsOf(userId, today);
+        if (config.adminTeam() != null && teams.contains(config.adminTeam())) return processExists(processId);
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT EXISTS (
@@ -767,14 +862,29 @@ public final class EwfService {
                                SELECT 1 FROM ewf_core.task_instance t
                                 WHERE t.process_id = p.id
                                   AND (t.assignee_id = ANY(?) OR t.acted_by_id = ANY(?) OR t.claimed_by_id = ANY(?)
-                                       OR t.from_user_id = ANY(?) OR t.moved_to_id = ANY(?) OR t.team_code = ANY(?)))))""")) {
+                                       OR t.from_user_id = ANY(?) OR t.moved_to_id = ANY(?) OR t.team_code = ANY(?)))
+                               OR EXISTS (SELECT 1 FROM ewf_core.comment pc WHERE pc.process_id = p.id AND pc.author_id = ?)
+                               OR EXISTS (SELECT 1 FROM ewf_core.attachment pa WHERE pa.process_id = p.id AND pa.uploaded_by = ?)))""")) {
                 Array a = c.createArrayOf("bigint", ids.toArray());
                 ps.setLong(1, processId);
                 for (int i = 2; i <= 7; i++) ps.setArray(i, a);
                 ps.setArray(8, c.createArrayOf("varchar", teams.toArray()));
+                ps.setLong(9, userId);                       // chi ha commentato o allegato continua a vedere il processo
+                ps.setLong(10, userId);
                 try (ResultSet rs = ps.executeQuery()) {
                     rs.next();
                     return rs.getBoolean(1);
+                }
+            }
+        });
+    }
+
+    private boolean processExists(long processId) {
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("SELECT 1 FROM ewf_core.process_instance WHERE id = ?")) {
+                ps.setLong(1, processId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    return rs.next();
                 }
             }
         });

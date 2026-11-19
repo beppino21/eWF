@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="su_0" beanbinding="#{d.AutoSubstitutionUI}" />
+<t:rowtitlebar id="su_1" text="Auto-sostituzione" />
+<t:rowheader id="su_h" >
+<t:button id="su_back" actionListener="#{d.AutoSubstitutionUI.onBackToMenu}" text="« Menu" width="80" />
+</t:rowheader>
+<t:rowbodypane id="su_body" padding="20" >
+<t:row id="su_intro" >
+<t:label id="su_intro_lbl" font="size:12;color:#666666" text="Indica chi vedra' e potra' firmare le tue attivita' (in aggiunta a te) per un periodo determinato." width="100%" />
+</t:row>
+<t:rowdistance id="su_d0" height="16" />
+<t:row id="su_no" rendered="#{d.AutoSubstitutionUI.notAllowed}" >
+<t:pane id="su_no_pane" background="#FFF3E0" border="#FFB74D" padding="10" width="100%" >
+<t:label id="su_no_lbl" font="color:#E65100" text="Non sei abilitato a indicare un sostituto: per le assenze rivolgiti all'amministratore di eWF." width="100%" />
+</t:pane>
+</t:row>
+<t:rowdistance id="su_d0b" height="16" rendered="#{d.AutoSubstitutionUI.notAllowed}" />
+<t:row id="su_esist" rendered="#{d.AutoSubstitutionUI.hasExisting}" >
+<t:pane id="su_esist_pane" background="#E3F2FD" border="#90CAF9" padding="10" width="100%" >
+<t:label id="su_esist_lbl" font="weight:bold;color:#1565C0" text="#{d.AutoSubstitutionUI.existingSummary}" />
+</t:pane>
+</t:row>
+<t:rowdistance id="su_d1" height="16" rendered="#{d.AutoSubstitutionUI.hasExisting}" />
+<t:row id="su_copertura" rendered="#{d.AutoSubstitutionUI.hasCovering}" >
+<t:pane id="su_copertura_pane" background="#FFF3E0" border="#FFB74D" padding="10" width="100%" >
+<t:label id="su_copertura_lbl" font="color:#E65100" text="#{d.AutoSubstitutionUI.coveringMessage}" width="100%" />
+</t:pane>
+</t:row>
+<t:rowdistance id="su_d1b" height="16" rendered="#{d.AutoSubstitutionUI.hasCovering}" />
+<t:row id="su_r1" coldistance="8" rendered="#{d.AutoSubstitutionUI.canManage}" >
+<t:label id="su_r1_lbl" labeltext="Sostituto:" width="120" />
+<t:combobox id="su_r1_combo" flush="true" validvaluesbinding="#{d.AutoSubstitutionUI.substituteVVB}" value="#{d.AutoSubstitutionUI.substitute}" width="260" withnullitem="true" />
+</t:row>
+<t:rowdistance id="su_d3" height="16" rendered="#{d.AutoSubstitutionUI.canManage}" />
+<t:row id="su_r2" coldistance="8" rendered="#{d.AutoSubstitutionUI.canManage}" >
+<t:label id="su_r2_lbl" labeltext="Dal:" width="120" />
+<t:calendarfield id="su_r2_cal" flush="true" format="date" formatmask="dd/MM/yyyy" timezone="LOCAL" value="#{d.AutoSubstitutionUI.from}" width="140" />
+<t:coldistance id="su_r2_cd" width="20" />
+<t:label id="su_r3_lbl" labeltext="Al:" width="30" />
+<t:calendarfield id="su_r3_cal" flush="true" format="date" formatmask="dd/MM/yyyy" timezone="LOCAL" value="#{d.AutoSubstitutionUI.to}" width="140" />
+</t:row>
+<t:rowdistance id="su_d4" height="4" rendered="#{d.AutoSubstitutionUI.canManage}" />
+<t:row id="su_r2_hint" rendered="#{d.AutoSubstitutionUI.canManage}" >
+<t:coldistance id="su_r2_hint_cd" width="128" />
+<t:label id="su_r2_hint_lbl" font="size:10;color:#888888" text="Estremi inclusi: il sostituto vedra' le tue attivita' anche il primo e l'ultimo giorno." />
+</t:row>
+<t:rowdistance id="su_d5" height="20" rendered="#{d.AutoSubstitutionUI.canManage}" />
+<t:row id="su_r3" coldistance="8" rendered="#{d.AutoSubstitutionUI.canManage}" >
+<t:coldistance id="su_r3_cd" width="120" />
+<t:button id="su_save_btn" actionListener="#{d.AutoSubstitutionUI.onSave}" text="Salva »" width="120" />
+<t:button id="su_cancel_btn" actionListener="#{d.AutoSubstitutionUI.onRemove}" rendered="#{d.AutoSubstitutionUI.hasExisting}" text="Rimuovi sostituzione" width="160" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

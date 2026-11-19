@@ -163,7 +163,7 @@
 </t:gridcol>
 </t:fixgrid>
 </t:row>
-<t:row id="f_2" >
+<t:row id="f_2" rendered="#{d.TaskDetailUI.editable}" >
 <t:fileuploadbutton id="f_2u" actionListener="#{d.TaskDetailUI.onUpload}" maxfilesize="20000000" multiselect="true" text="Allega file..." width="160" />
 </t:row>
 </t:foldablepane>
@@ -186,7 +186,7 @@
 </t:gridcol>
 </t:fixgrid>
 </t:row>
-<t:row id="c_2" coldistance="8" >
+<t:row id="c_2" coldistance="8" rendered="#{d.TaskDetailUI.editable}" >
 <t:textarea id="c_2t" height="50" text="#{d.TaskDetailUI.newComment}" width="100%" />
 <t:button id="c_2b" actionListener="#{d.TaskDetailUI.onAddComment}" text="Aggiungi" width="100" />
 </t:row>

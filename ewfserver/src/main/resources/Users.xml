@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="u_0" beanbinding="#{d.UsersUI}" />
+<t:rowtitlebar id="u_1" text="Utenti" />
+<t:rowheader id="u_h" coldistance="6" >
+<t:button id="u_back" actionListener="#{d.UsersUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="u_hd0" width="12" />
+<t:field id="u_hf" actionListener="#{d.UsersUI.onFilter}" flush="true" flushtimer="800" text="#{d.UsersUI.filter}" tooltip="Cerca per login, nome, e-mail, utente SAP o team" width="220" />
+<t:coldistance id="u_hd" width="100%" />
+<t:button id="u_new" actionListener="#{d.UsersUI.onNew}" text="Nuovo utente" width="120" />
+</t:rowheader>
+<t:rowbodypane id="u_body" padding="14" rowdistance="10" >
+<t:row id="u_g" >
+<t:fixgrid id="u_grid" avoidrowstretching="true" objectbinding="#{d.UsersUI.grid}" sbvisibleamount="12" width="100%" >
+<t:gridcol id="u_c1" text="Login" width="120" >
+<t:label id="u_c1l" font="weight:bold" text=".{login}" />
+</t:gridcol>
+<t:gridcol id="u_c2" text="Nome" width="200" >
+<t:label id="u_c2l" text=".{name}" />
+</t:gridcol>
+<t:gridcol id="u_c3" text="E-mail" width="220" >
+<t:label id="u_c3l" text=".{email}" />
+</t:gridcol>
+<t:gridcol id="u_c4" text="Utente SAP" width="100" >
+<t:label id="u_c4l" text=".{sapUser}" />
+</t:gridcol>
+<t:gridcol id="u_c5" text="Classe" width="70" >
+<t:label id="u_c5l" text=".{userClass}" />
+</t:gridcol>
+<t:gridcol id="u_c6" text="Auto-sost." width="90" >
+<t:label id="u_c6l" text=".{subst}" />
+</t:gridcol>
+<t:gridcol id="u_c7" text="Stato" width="90" >
+<t:label id="u_c7l" align="center" background=".{stateColor}" text=".{state}" />
+</t:gridcol>
+<t:gridcol id="u_c8" text="Team" width="100%" >
+<t:label id="u_c8l" text=".{teams}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+
+<t:row id="u_e" rendered="#{d.UsersUI.editing}" >
+<t:pane id="u_ep" border="#90CAF9" padding="12" rowdistance="8" width="100%" >
+<t:row id="u_e0" >
+<t:label id="u_e0l" font="weight:bold;color:#1565C0" text="#{d.UsersUI.editTitle}" />
+</t:row>
+<t:row id="u_e1" coldistance="12" >
+<t:field id="u_e1a" enabled="#{d.UsersUI.loginEditable}" labeltext="Login" text="#{d.UsersUI.login}" width="160" />
+<t:field id="u_e1b" labeltext="Nome" text="#{d.UsersUI.name}" width="260" />
+<t:field id="u_e1c" labeltext="E-mail" text="#{d.UsersUI.email}" width="260" />
+</t:row>
+<t:row id="u_e2" coldistance="12" >
+<t:field id="u_e2a" labeltext="Utente SAP" text="#{d.UsersUI.sapUser}" width="160" />
+<t:combobox id="u_e2b" labeltext="Classe utente" validvaluesbinding="#{d.UsersUI.classesVVB}" value="#{d.UsersUI.userClass}" width="260" withnullitem="true" />
+<t:combobox id="u_e2c" labeltext="Auto-sostituzione" validvaluesbinding="#{d.UsersUI.substVVB}" value="#{d.UsersUI.canSubstitute}" width="180" />
+<t:checkbox id="u_e2d" selected="#{d.UsersUI.active}" text="Attivo" />
+</t:row>
+<t:row id="u_t0" rendered="#{d.UsersUI.existing}" >
+<t:label id="u_t0l" font="weight:bold" text="Team" />
+</t:row>
+<t:row id="u_t1" rendered="#{d.UsersUI.existing}" >
+<t:fixgrid id="u_tg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.UsersUI.memberships}" sbvisibleamount="5" width="100%" >
+<t:gridcol id="u_tc1" text="Team" width="260" >
+<t:label id="u_tc1l" text=".{team}" />
+</t:gridcol>
+<t:gridcol id="u_tc2" text="Dal" width="100" >
+<t:label id="u_tc2l" text=".{from}" />
+</t:gridcol>
+<t:gridcol id="u_tc3" text="Al" width="110" >
+<t:label id="u_tc3l" text=".{to}" />
+</t:gridcol>
+<t:gridcol id="u_tc4" text="Stato" width="80" >
+<t:label id="u_tc4l" text=".{state}" />
+</t:gridcol>
+<t:gridcol id="u_tc5" text="" width="80" >
+<t:button id="u_tc5b" actionListener=".{onRemove}" rendered=".{removable}" text="Togli" width="72" />
+</t:gridcol>
+<t:gridcol id="u_tc6" text="" width="100%" >
+<t:label id="u_tc6l" text="" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="u_t2" coldistance="8" rendered="#{d.UsersUI.existing}" >
+<t:combobox id="u_t2t" labeltext="Aggiungi al team" validvaluesbinding="#{d.UsersUI.teamsVVB}" value="#{d.UsersUI.team}" width="260" withnullitem="true" />
+<t:calendarfield id="u_t2f" format="date" formatmask="dd/MM/yyyy" labeltext="Dal" timezone="LOCAL" value="#{d.UsersUI.teamFrom}" width="110" />
+<t:calendarfield id="u_t2a" format="date" formatmask="dd/MM/yyyy" labeltext="Al" timezone="LOCAL" value="#{d.UsersUI.teamTo}" width="110" />
+<t:button id="u_t2b" actionListener="#{d.UsersUI.onAddTeam}" text="Aggiungi" width="90" />
+</t:row>
+<t:row id="u_e3" coldistance="8" >
+<t:button id="u_e3s" actionListener="#{d.UsersUI.onSave}" text="Salva" width="100" />
+<t:button id="u_e3c" actionListener="#{d.UsersUI.onCancelEdit}" text="Chiudi" width="80" />
+<t:coldistance id="u_e3d" width="100%" />
+<t:button id="u_e3p" actionListener="#{d.UsersUI.onResetPassword}" rendered="#{d.UsersUI.existing}" text="Password provvisoria..." width="170" />
+<t:button id="u_e3u" actionListener="#{d.UsersUI.onUnlock}" rendered="#{d.UsersUI.existing}" text="Sblocca" width="90" />
+</t:row>
+</t:pane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

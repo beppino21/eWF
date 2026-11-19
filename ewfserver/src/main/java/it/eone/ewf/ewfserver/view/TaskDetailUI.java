@@ -76,10 +76,20 @@ public class TaskDetailUI extends PageBean implements Serializable {
     @Override public String getRootExpressionUsedInPage() { return "#{d.TaskDetailUI}"; }
 
     public void prepare(long processId, IListener listener) {
+        prepare(processId, listener, false);
+    }
+
+    /** readOnly: consultazione (es. "Processi a cui ho partecipato"): nessuna azione, niente aggiunte ne' cancellazioni. */
+    public void prepare(long processId, IListener listener, boolean readOnly) {
         m_processId = processId;
         m_listener = listener;
+        m_readOnly = readOnly;
         load();
     }
+
+    private boolean m_readOnly;
+
+    public boolean isEditable() { return !m_readOnly; }
 
     private EwfService svc() { return EwfApp.get().service(); }
     private long uid() { return EwfSession.instance().userId(); }
@@ -253,6 +263,7 @@ public class TaskDetailUI extends PageBean implements Serializable {
     }
 
     public void onAddComment(ActionEvent ae) {
+        if (m_readOnly) return;
         try {
             svc().addComment(uid(), m_processId, m_newComment);
             m_newComment = null;
@@ -264,6 +275,7 @@ public class TaskDetailUI extends PageBean implements Serializable {
     }
 
     public void onUpload(ActionEvent ae) {
+        if (m_readOnly) return;
         if (!(ae instanceof BaseActionEventUpload up)) return;
         int added = 0;
         for (int i = 0; i < up.getNumberOfUploadedFiles(); i++) {
@@ -326,8 +338,8 @@ public class TaskDetailUI extends PageBean implements Serializable {
     }
 
     public boolean isLoaded() { return m_detail != null; }
-    public boolean isCanAct() { return myTask() != null && myTask().webActionable(); }
-    public boolean isSapGuiOnly() { return myTask() != null && !myTask().webActionable(); }
+    public boolean isCanAct() { return !m_readOnly && myTask() != null && myTask().webActionable(); }
+    public boolean isSapGuiOnly() { return !m_readOnly && myTask() != null && !myTask().webActionable(); }
     public boolean isHasOptions() { return isCanAct() && !myTask().options().isEmpty(); }
     public boolean isPlainDecision() { return isCanAct() && myTask().options().isEmpty(); }
     public boolean isHasFunctions() { return isCanAct() && !myTask().functions().isEmpty(); }
@@ -466,7 +478,7 @@ public class TaskDetailUI extends PageBean implements Serializable {
         public String getSize() { return size(a.sizeBytes()); }
         public String getBy() { return nvl(a.uploadedBy()); }
         public String getWhen() { return ts(a.uploadedAt()); }
-        public boolean isDeletable() { return a.deletable(); }
+        public boolean isDeletable() { return !m_readOnly && a.deletable(); }
 
         public void onDownload(ActionEvent ae) {
             try {
