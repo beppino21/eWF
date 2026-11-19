@@ -2,7 +2,7 @@
 
 **Destinatari:** colleghi del gruppo di sviluppo e-One, esperti di SAP e ABAP, meno di Java, PostgreSQL e CaptainCasa.
 
-**Stato:** bozza 0.2 – novembre 2026 (0.2: permessi completi di `ewf_app`, regole su team e sostituzioni, servizi di amministrazione, pagine nuove dell'applicazione, Gantt, rilascio dal designer). Descrive il prototipo così com'è: schema del database alla versione 0.14, moduli Java, collegamento a SAP S/4HANA Private via RFC.
+**Stato:** bozza 0.2 – novembre 2026 (0.2: permessi completi di `ewf_app`, regole su team e sostituzioni, servizi di amministrazione, pagine nuove dell'applicazione, Gantt, allegati SAP, rilascio dal designer e hot deploy). Descrive il prototipo così com'è: schema del database alla versione 0.15, moduli Java, collegamento a SAP S/4HANA Private via RFC.
 
 **Da leggere insieme a:** Analisi funzionale (cosa fa eWF). Qui si spiega come è costruito.
 
@@ -146,7 +146,7 @@ Una riga per persona. È il centro dell'organizzazione: quasi tutte le altre tab
 | `list_summary` | Modello del riepilogo nella lista delle attività, con segnaposto `{chiave}`. |
 | `list_columns` | Colonne specifiche (jsonb): elenco di etichetta + chiave. |
 | `sla_yellow_days`, `sla_red_days` | Soglie del semaforo dei giorni di attesa (default 6 e 11). |
-| `attachment_scope` | `PROCESS` = allegati nel DB eWF; `DOCUMENT` = nel sistema di origine. |
+| `attachment_scope` | `PROCESS` = allegati nel DB eWF; `DOCUMENT` = nel sistema di origine; `BOTH` = entrambi, nuovi file in eWF (dalla 0.15). |
 | `legacy_flags` | Indicatori del legacy senza un campo dedicato (jsonb). |
 
 ### process_version, step_def, task_def – la definizione (ex TASK)
@@ -248,8 +248,9 @@ I permessi di `ewf_app` stanno ora in un unico script, `db/ewf_grants_app.sql` d
 
 Nella cartella `db/` di `ewf-engine` ci sono:
 
-- `ewf_schema_v0.14.sql`: schema completo, per un database nuovo;
-- `ewf_migrate_X_to_Y.sql`: le migrazioni da una versione alla successiva (dalla 0.4 alla 0.14), da applicare in ordine come `ewf_owner`.
+- `ewf_schema_v0.15.sql`: schema completo, per un database nuovo;
+- `ewf_migrate_X_to_Y.sql`: le migrazioni da una versione alla successiva (dalla 0.4 alla 0.15), da applicare in ordine come `ewf_owner`;
+- `ewf_grants_app.sql`: i permessi di `ewf_app`, da rieseguire dopo ogni migrazione.
 
 È lo stesso principio dei trasporti: ogni cambiamento di struttura ha il suo script, e un ambiente si porta avanti applicando gli script mancanti. Schema completo e migrazioni producono lo stesso risultato (verificato confrontando gli schemi con `pg_dump`).
 
@@ -382,7 +383,23 @@ Lato eWF, il job `EWF_START_QUEUE` di eone-connect legge la coda ogni 30 secondi
 
 Il pulsante **Aggiorna** della lista chiama `JobHost.readStartQueueNow(timeout)`: anticipa la prossima esecuzione del job e aspetta al massimo qualche secondo. Le esecuzioni che non trovano nulla non vengono scritte in `job_run`, quindi la fine si riconosce confrontando due fotografie: o cambia l'istante dell'ultima esecuzione a vuoto, o compare una nuova riga in `job_run`. L'esito (`DONE`, `FAILED`, `STILL_RUNNING`, `NOT_ACTIVE`) decide il messaggio all'utente; la lista si rilegge comunque.
 
-## 7.4 Schede documento
+## 7.4 Allegati del documento
+
+L'adattatore `SapDocumentAttachments` (`ewf-sap`, pacchetto `attach`) realizza la SPI `DocumentAttachments` con tre FM abilitate RFC del gruppo di `/EWF/DOC_INFO`. Il tipo documento eWF si traduce nel tipo oggetto SAP (`F` → `BUS2012`), la chiave è il numero con gli zeri iniziali.
+
+| Oggetto SAP | Ruolo |
+| --- | --- |
+| `/EWF/DOC_ATTACH_LIST` | Elenco degli allegati di un oggetto: GOS (relazioni `ATTA` in `SRGBTBREL`, intestazione in `SOOD`) e ArchiveLink (`ARCHIV_GET_CONNECTIONS`, nome da `TOAAT` o `TOASP`, tipo da `TOADD`). Struttura `/EWF/ST_DOC_ATTACH`. |
+| `/EWF/DOC_ATTACH_GET` | Contenuto di un allegato (`SO_DOCUMENT_READ_API1` per GOS, `ARCHIVOBJECT_GET_TABLE` per ArchiveLink). Prima rilegge l'elenco e rifiuta un id non collegato a quell'oggetto: conoscere l'id non basta. |
+| `/EWF/DOC_ATTACH_COUNT` | Numero di allegati per più oggetti in una sola chiamata, per i pulsanti della lista. Struttura `/EWF/ST_DOC_ATTACH_CNT`. |
+
+- L'id di un allegato è opaco per eWF: `G` + `INSTID_B` per GOS, `A` + archivio + id documento + classe per ArchiveLink.
+- Il caricamento in SAP non è ancora previsto (`canAdd` = falso): con `BOTH` i nuovi file vanno in eWF.
+- Se SAP non risponde, la lista non fallisce: il pulsante resta attivo senza numero e l'elenco mostra gli allegati eWF con un avviso.
+- **Nota JCo:** i campi data e ora (DATS, TIMS) letti come testo arrivano nel formato `2026-11-19` e `14:30:00`, non come in ABAP (`20261119`, `143000`). L'adattatore accetta entrambi.
+- L'utente RFC deve avere il permesso di leggere i documenti SAPoffice.
+
+## 7.5 Schede documento
 
 La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per posizione con `/EWF/DOC_INFO`, l'indirizzo del fornitore e il nome della società con `BAPI_VENDOR_GETDETAIL` e `BAPI_COMPANYCODE_GETDETAIL`. Le descrizioni vengono dalla fotografia del processo. Il PDF lo impagina un unico componente comune a tutte le schede (`SheetPdf`, libreria OpenPDF nella stessa versione usata da CaptainCasa).
 
@@ -395,7 +412,7 @@ La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per p
 - `SubstitutionService`: sostituzioni dell'utente (auto-sostituzione: un solo sostituto, `setMine`/`clearMine`) e, per l'amministratore, di tutti.
 - `AdminService`: tutto ciò che è riservato agli amministratori, ognuno con `requireAdmin` in testa: processi in errore (riprova, conferma dell'esito), elenco e annullamento dei processi, avvio forzato (tipi documento → processi ammessi → avvio), sostituzioni di tutti, utenti, team e appartenenze.
 - In `EwfService`, oltre a lista e dettaglio: `timeline` (dati del Gantt), `infoCounts` (numeri di allegati, commenti e storico per i pulsanti in riga, con una query per tutta la lista), `participated` (processi a cui ho partecipato, con il ruolo avuto). La visibilità di un processo include ora gli amministratori e chi vi ha scritto un commento o caricato un allegato.
-- SPI verso il sistema di origine: `DocumentSheets` (schede PDF), `DocumentAttachments` (allegati del documento), `SapGuiLink` (apertura in SAP GUI). Il modulo SAP realizza le schede e il collegamento SAP GUI; gli allegati del documento hanno solo l'interfaccia. Per la Public Edition se ne scriveranno realizzazioni OData.
+- SPI verso il sistema di origine: `DocumentSheets` (schede PDF), `DocumentAttachments` (allegati del documento: elenco, contenuto, conteggio per più documenti, se accetta nuovi file), `SapGuiLink` (apertura in SAP GUI). Il modulo SAP realizza schede e allegati via RFC; il collegamento SAP GUI non è ancora collegato. Per la Public Edition se ne scriveranno realizzazioni OData.
 - Errori con codici stabili (`ServiceException`): non trovato, non autorizzato, dati non validi, stato non valido, sistema di origine non disponibile…
 
 ## 8.2 ewfserver
@@ -421,12 +438,22 @@ La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per p
 - **Nomi delle proprietà:** le espressioni delle pagine seguono le regole JavaBeans. Un getter `getFDocument` produce la proprietà `FDocument`, non `fDocument`: per questo i filtri si chiamano `getFilterDocument` e simili. Le espressioni vengono verificate con un controllo automatico (Introspector) prima della consegna.
 - Nelle espressioni si evita la negazione `!`: si usano getter espliciti (`isNotX`).
 
-### Rilascio dal designer CaptainCasa
+### Rilascio dal designer CaptainCasa e hot deploy
 
-- **Hot deploy** per le classi del pacchetto `…ewfserver.view` e per le pagine XML: il designer le copia in `eclnthotdeploy/classes`, senza riavviare.
-- **Maven install + Reload** per tutto il resto (moduli `ewf-*`, classi fuori da `view`).
+CaptainCasa usa due classloader. Quello dell'**applicazione** legge `WEB-INF/classes` e `WEB-INF/lib`; quello dell'**hot deploy** legge `eclnthotdeploy/classes`, è figlio del primo e si può rimpiazzare senza riavviare l'applicazione. Il figlio vede le classi del padre, il padre non vede quelle del figlio.
 
-> **Non copiare a mano classi o XML in `WEB-INF/classes`.** Una copia vecchia lì prevale su quella del hot deploy e la pagina sembra non cambiare mai. È successo durante lo sviluppo; la soluzione è stata cancellare le copie, non aggiungere script di copia.
+Tomcat carica da solo, con il classloader dell'applicazione, le classi dichiarate nel `web.xml`: in `ewfserver` il listener `JobHost` (avvia lo scheduler) e il filtro `SecurityHeadersFilter`. Queste classi, e quello che usano (`app`, `config`, `context`, `web`), devono quindi stare in `WEB-INF/classes`.
+
+Per questo nel `.ccproject` l'hot deploy è limitato alle pagine:
+
+`<hotdeploymentpackage name="it.eone.ewf.ewfserver.view"/>`
+
+- **Hot deploy** per le classi `view` e per le pagine XML: il designer le copia in `eclnthotdeploy/classes`, senza riavviare.
+- **Maven install + Reload** per tutto il resto: moduli `ewf-*` e classi fuori da `view`. Il Reload copia `target/ewfserver` nel runtime e mette in `WEB-INF/classes` tutto ciò che non è hot deploy.
+- Start/Stop del designer avvia e ferma l'applicazione e basta: non copia nulla.
+- Le classi `app`, `config`, `context` e `web` non devono mai usare classi di `view`.
+
+> **Attenzione al valore proposto dal designer.** Con `name="*"` tutte le classi vanno in hot deploy, `WEB-INF/classes` resta vuota e Tomcat non trova il listener (`ClassNotFoundException: …JobHost`). Durante lo sviluppo il problema è rimasto nascosto da copie manuali residue in `WEB-INF/classes`. **Non copiare mai a mano classi o XML nel runtime:** si nascondono gli errori di configurazione.
 
 # 9. Sicurezza
 
@@ -447,4 +474,5 @@ La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per p
 | Log su file | Oggi i log vanno nella console di Tomcat; serve un file con rotazione. |
 | Storico delle appartenenze | Una riga per (team, utente): per uno storico completo servirebbe una chiave con la data di inizio. |
 | Versioni delle librerie | OpenPDF va tenuto allineato alla versione portata da CaptainCasa. |
+| Allegati: caricamento in SAP | Da fare: FM di scrittura GOS e scelta della destinazione dei nuovi file con `BOTH`. |
 | Public Edition | Realizzazioni OData delle SPI e dell'esecuzione handler; avvio dagli eventi di business. |

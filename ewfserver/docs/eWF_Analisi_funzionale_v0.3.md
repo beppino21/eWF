@@ -4,7 +4,7 @@ Workflow approvativo e-One: motore Java su PostgreSQL, collegato a SAP S/4HANA, 
 
 **Destinatari:** colleghi del gruppo di sviluppo e-One, esperti di SAP.
 
-**Stato:** bozza 0.3 – novembre 2026. 0.2: avvio automatico allineato al codice. 0.3: menu e pagina iniziale, sostituzioni e auto-sostituzione, processi a cui ho partecipato, Gantt, funzioni da amministratore (capitoli 5 e 6). Descrive il comportamento del prototipo verificato sul sistema DEV (S/4HANA Private, ordini d'acquisto).
+**Stato:** bozza 0.3 – novembre 2026. 0.2: avvio automatico allineato al codice. 0.3: menu e pagina iniziale, sostituzioni e auto-sostituzione, processi a cui ho partecipato, Gantt, funzioni da amministratore (capitoli 5 e 6), allegati SAP (GOS e ArchiveLink) e modalità BOTH. Descrive il comportamento del prototipo verificato sul sistema DEV (S/4HANA Private, ordini d'acquisto).
 
 **Documenti collegati:** Architettura e base dati; Dal prototipo alla produzione; Registro delle decisioni. Da scrivere: Guida al riuso; Esercizio e configurazione.
 
@@ -266,7 +266,7 @@ Sotto le intestazioni c'è una riga di campi, uno per colonna, come nel ticketin
 
 ### Allegati, Commenti, Storico in riga
 
-Ogni riga ha tre pulsanti, **Allegati**, **Commenti** e **Storico**, che aprono una finestra sopra la lista senza passare dal dettaglio. Un pulsante è attivo ed evidenziato, con il numero, solo se c'è qualcosa da vedere. Fa eccezione Allegati per i processi con gli allegati nel sistema di origine: contarli richiederebbe una chiamata a SAP per ogni riga, quindi il pulsante resta sempre attivo, senza numero (vedi il Registro delle decisioni).
+Ogni riga ha tre pulsanti, **Allegati**, **Commenti** e **Storico**, che aprono una finestra sopra la lista senza passare dal dettaglio. Un pulsante è attivo ed evidenziato, con il numero, solo se c'è qualcosa da vedere. Per gli allegati che stanno in SAP il numero si chiede a SAP con **una sola chiamata per tutta la pagina** e si somma a quelli in eWF. Se SAP non risponde, il pulsante Allegati resta attivo senza numero e la lista funziona comunque.
 
 Nella finestra si passa da una vista all'altra (Allegati, Commenti, Storico, Gantt). Commenti e allegati seguono le regole del dettaglio.
 
@@ -313,7 +313,8 @@ I **commenti** sono note libere sul processo, visibili a chi può vedere il proc
 Per gli **allegati**, il tipo processo stabilisce dove stanno:
 
 - **PROCESS:** nel database eWF. Si possono aggiungere più file insieme; può eliminarli solo chi li ha caricati, solo a processo aperto, e restano comunque nel database come cancellati.
-- **DOCUMENT:** nel sistema di origine, per esempio gli allegati GOS dell'OdA. eWF li consulterà al momento, senza copiarli. L'interfaccia è pronta; mancano gli adattatori: RFC per R/3 e S/4 on-premise, OData per S/4 Public, dietro la stessa interfaccia.
+- **DOCUMENT:** nel sistema di origine. Per SAP sono gli allegati **GOS** e i documenti **ArchiveLink** collegati al documento (per l'OdA l'oggetto `BUS2012`). eWF li legge al momento, senza copiarli, e li fa scaricare. Per ora in **sola consultazione**: da eWF non se ne aggiungono.
+- **BOTH (consigliato):** le due cose insieme, in un elenco unico con la colonna **Origine** (SAP / eWF). I nuovi file vanno in eWF, con le regole di PROCESS. Se SAP non risponde, restano visibili gli allegati eWF con un avviso.
 
 La dimensione massima di un allegato è configurabile (default 20 MB).
 
@@ -433,7 +434,7 @@ Sui rilasci (step 20–40) c'è l'aggancio `BEFORE_ACTION` `/EWF/WF_CHECK_LOCK_E
 | --- | --- |
 | Presa in carico dei task di team | Prevista dal motore, non ancora disponibile nell'applicazione web. |
 | Controllo di budget | Il controllo dell'ordinato annuo per fornitore di `WF_USER_TASK` non è ancora implementato. |
-| Allegati nel sistema di origine | Interfaccia pronta, adattatori da scrivere: GOS via RFC (R/3, S/4 on-premise) e `API_CV_ATTACHMENT_SRV` via OData (Public Edition), insieme all'adattatore OData del documento. |
+| Allegati nel sistema di origine | Lettura via RFC (GOS e ArchiveLink) fatta. Da fare: caricamento in SAP da eWF; adattatore OData `API_CV_ATTACHMENT_SRV` per la Public Edition, insieme a quello del documento. |
 | Apri in SAP | Collegamento SAP GUI (`/EWF/VIEWDOC` e file .sap) previsto, non implementato. |
 | Azione all'annullamento | Oggi nessuna. Se un cliente la chiede (per esempio il flag di cancellazione sulle posizioni dell'OdA), andrà configurata per tipo processo, come le azioni di fine processo. |
 | Accesso a due fattori (MFA) | Da riprendere dall'applicazione di ticketing. |

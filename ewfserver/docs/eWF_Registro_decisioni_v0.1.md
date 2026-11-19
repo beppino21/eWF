@@ -11,17 +11,20 @@ Raccoglie le scelte di progetto prese durante lo sviluppo del prototipo, con il 
 | N. | Decisione | Data | Stato |
 | --- | --- | --- | --- |
 | D01 | L'annullamento di un processo non agisce su SAP | nov 2026 | Valida (per ora) |
-| D02 | Pulsante Allegati sempre attivo per gli allegati del documento | nov 2026 | Valida |
-| D03 | Allegati del documento: un'interfaccia, due adattatori (RFC e OData) | nov 2026 | Valida, da realizzare |
+| D02 | Pulsante Allegati sempre attivo per gli allegati del documento | nov 2026 | Sostituita da D13 |
+| D03 | Allegati del documento: un'interfaccia, due adattatori (RFC e OData) | nov 2026 | Valida; RFC realizzato |
 | D04 | Team e utenti si gestiscono in ewfserver, non nel designer | nov 2026 | Valida |
 | D05 | Gantt disegnato come SVG lato server, con scala compressa | nov 2026 | Valida |
 | D06 | Amministratori = membri del team di riserva; almeno uno sempre attivo | nov 2026 | Valida |
 | D07 | Auto-sostituzione come nel ticketing: un solo sostituto alla volta | nov 2026 | Valida |
 | D08 | Una sola appartenenza per team e utente | nov 2026 | Valida, da rivedere se serve lo storico |
-| D09 | Rilascio con hot deploy del designer, nessuna copia manuale | nov 2026 | Valida |
+| D09 | Rilascio con hot deploy del designer, nessuna copia manuale | nov 2026 | Valida, motivo in D14 |
 | D10 | Anteprima del designer con origine ammessa, filtro sempre attivo | nov 2026 | Valida |
 | D11 | Icona per tipo processo nel menu rinviata | nov 2026 | Rinviata |
 | D12 | Password legacy non migrate; segreti solo in variabili d'ambiente | ott 2026 | Valida |
+| D13 | Numero degli allegati SAP con una sola RFC per pagina | nov 2026 | Valida |
+| D14 | Hot deploy solo per il pacchetto view | nov 2026 | Valida |
+| D15 | Allegati: modalità BOTH (SAP + eWF) consigliata | nov 2026 | Valida |
 
 # 2. Le decisioni
 
@@ -43,7 +46,7 @@ Raccoglie le scelte di progetto prese durante lo sviluppo del prototipo, con il 
 | **Decisione** | Per i tipi processo con allegati nel sistema di origine (DOCUMENT) il pulsante Allegati in riga è sempre attivo e senza numero. Per gli allegati in eWF (PROCESS) è attivo ed evidenziato solo se ce ne sono. |
 | **Perché** | Contare gli allegati SAP vorrebbe dire una chiamata a SAP per ogni riga della lista, a ogni aggiornamento: lento, e la lista diventerebbe dipendente dalla disponibilità di SAP. |
 | **Scartato** | Contarli al caricamento della lista; tenere una copia del numero in eWF (diventerebbe vecchio). |
-| **Conseguenze** | L'utente può aprire la finestra e trovarla vuota. Il numero si vede nel dettaglio, dove la chiamata è una sola. |
+| **Conseguenze** | L'utente può aprire la finestra e trovarla vuota. Il numero si vede nel dettaglio, dove la chiamata è una sola. **Sostituita da D13:** il conteggio si può fare con una sola chiamata per tutta la pagina. |
 
 ## D03 – Allegati del documento: un'interfaccia, due adattatori
 
@@ -53,7 +56,7 @@ Raccoglie le scelte di progetto prese durante lo sviluppo del prototipo, con il 
 | **Decisione** | Gli allegati del documento passano dall'interfaccia `DocumentAttachments`. Si scriveranno due realizzazioni: RFC (GOS) per R/3 e S/4 on-premise, OData (`API_CV_ATTACHMENT_SRV`) per S/4 Public, nello stesso piano dell'adattatore OData del documento. |
 | **Perché** | Stessa logica già usata per schede e collegamento SAP GUI: il motore e le pagine non sanno quale SAP c'è dietro. |
 | **Scartato** | Copiare gli allegati SAP nel database eWF. |
-| **Conseguenze** | Finché gli adattatori non ci sono, la modalità DOCUMENT non mostra allegati. |
+| **Conseguenze** | Realizzato via RFC (`/EWF/DOC_ATTACH_LIST`, `_GET`, `_COUNT`) per GOS e ArchiveLink, in sola consultazione. Restano l'adattatore OData e il caricamento in SAP. |
 
 ## D04 – Team e utenti in ewfserver
 
@@ -113,7 +116,7 @@ Raccoglie le scelte di progetto prese durante lo sviluppo del prototipo, con il 
 | **Decisione** | Pagine XML e classi del pacchetto `view` si rilasciano con l'hot deploy del designer; il resto con Maven install e Reload. Niente copie manuali né script di copia in `WEB-INF/classes`. |
 | **Perché** | Le copie manuali fatte in sviluppo lasciavano versioni vecchie che prevalevano su quelle nuove, e la pagina "non cambiava". Lo script di copia era una toppa sul sintomo. |
 | **Scartato** | Script di copia (BAT). |
-| **Conseguenze** | Regola da scrivere nella guida di esercizio. |
+| **Conseguenze** | Regola da scrivere nella guida di esercizio. Il motivo di fondo, emerso dopo, è in D14. |
 
 ## D10 – Anteprima del designer e intestazioni di sicurezza
 
@@ -144,4 +147,34 @@ Raccoglie le scelte di progetto prese durante lo sviluppo del prototipo, con il 
 | **Perché** | Il legacy conservava le password in modo non adatto; i segreti nei file finiscono prima o poi in un repository. |
 | **Scartato** | Migrare le password; tenerle in `config.properties`. |
 | **Conseguenze** | Al primo avvio ogni utente riceve una password provvisoria. |
+
+## D13 – Numero degli allegati SAP con una sola RFC per pagina
+
+| Voce | Contenuto |
+| --- | --- |
+| **Data** | 19/11/2026 |
+| **Decisione** | Il pulsante Allegati della lista mostra anche il numero degli allegati SAP. eWF chiede i numeri di tutti i documenti della pagina con una sola chiamata (`/EWF/DOC_ATTACH_COUNT`) e li somma a quelli in eWF. Se SAP non risponde, o la FM manca, il pulsante resta attivo senza numero. |
+| **Perché** | Il problema di D02 era una chiamata per riga; con una chiamata per pagina il costo è trascurabile. Un pulsante sempre attivo che apre finestre vuote confondeva gli utenti. |
+| **Scartato** | Pulsante sempre attivo (D02); copia del numero nel database eWF. |
+| **Conseguenze** | La lista dipende da SAP solo per il numero, mai per funzionare. |
+
+## D14 – Hot deploy solo per il pacchetto view
+
+| Voce | Contenuto |
+| --- | --- |
+| **Data** | 19/11/2026 |
+| **Decisione** | Nel `.ccproject` di ewfserver i pacchetti hot deploy sono solo `it.eone.ewf.ewfserver.view`, non `*` come propone il designer. |
+| **Perché** | Tomcat carica con il classloader dell'applicazione le classi dichiarate nel `web.xml` (listener `JobHost`, filtro `SecurityHeadersFilter`), e quel classloader non vede l'hot deploy. Con `*` la `WEB-INF/classes` resta vuota e l'applicazione non parte. Il problema era nascosto da copie manuali residue: è emerso quando il designer le ha tolte. |
+| **Scartato** | Lasciare `*` e spostare listener, filtro e avvio dei servizi in un jar a parte: corretto, ma un modulo in più. |
+| **Conseguenze** | Le classi `app`, `config`, `context` e `web` cambiano solo con Maven install + Reload; le pagine continuano con l'hot deploy. Le classi fuori da `view` non devono mai usare classi di `view`. |
+
+## D15 – Allegati: modalità BOTH consigliata
+
+| Voce | Contenuto |
+| --- | --- |
+| **Data** | 19/11/2026 |
+| **Decisione** | Nuovo valore `BOTH` di `attachment_scope` (schema 0.15): allegati del documento SAP e allegati eWF in un elenco unico con la colonna Origine; i nuovi file vanno in eWF. È la modalità consigliata; `EONE_ODA` la usa. |
+| **Perché** | Con gli allegati SAP in sola consultazione, DOCUMENT da solo toglieva la possibilità di allegare e PROCESS da solo nascondeva le offerte in GOS. Quasi sempre servono entrambi. |
+| **Scartato** | Scegliere tra PROCESS e DOCUMENT per tipo processo. |
+| **Conseguenze** | Gli allegati eWF caricati prima del passaggio restano visibili. Quando ci sarà il caricamento in SAP, si deciderà dove mandare i nuovi file. |
 
