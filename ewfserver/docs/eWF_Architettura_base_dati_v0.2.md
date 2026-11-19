@@ -2,7 +2,7 @@
 
 **Destinatari:** colleghi del gruppo di sviluppo e-One, esperti di SAP e ABAP, meno di Java, PostgreSQL e CaptainCasa.
 
-**Stato:** bozza 0.1 – novembre 2026. Descrive il prototipo così com'è: schema del database alla versione 0.14, moduli Java, collegamento a SAP S/4HANA Private via RFC.
+**Stato:** bozza 0.2 – novembre 2026 (0.2: permessi completi di `ewf_app`, regole su team e sostituzioni, servizi di amministrazione, pagine nuove dell'applicazione, Gantt, rilascio dal designer). Descrive il prototipo così com'è: schema del database alla versione 0.14, moduli Java, collegamento a SAP S/4HANA Private via RFC.
 
 **Da leggere insieme a:** Analisi funzionale (cosa fa eWF). Qui si spiega come è costruito.
 
@@ -110,14 +110,20 @@ Una riga per persona. È il centro dell'organizzazione: quasi tutte le altre tab
 | `user_class` | TB_CLS | Classi utente con i loro permessi e livelli. |
 | `area` | TB_ARR | Aree organizzative. |
 | `team` | TB_TEAM | Team (codice e descrizione). |
-| `team_member` | USER0.TEAM | Chi sta in quale team, con validità facoltativa. Un utente può stare in più team. |
+| `team_member` | USER0.TEAM | Chi sta in quale team, con validità facoltativa. Chiave (team, utente): un utente può stare in più team, ma **una sola riga per team**; se esce e rientra, il periodo nuovo sovrascrive il vecchio. |
 | `role` | ROLES | Ruoli usati dai task (es. RESPONSABILE_ACQ). |
 | `assignment_rule` | USER_TASK | **Regole di assegnazione:** ruolo + criteri facoltativi (tipo processo, gruppo acquisti, divisione, magazzino, fascia d'importo con divisa, validità) → utente oppure team. Almeno uno dei due destinatari deve esserci (vincolo CHECK). |
 | `assignment_exception` | WF_CLI_USER | Eccezioni: per un ruolo e un utente richiedente, chi autorizza al suo posto. |
 | `role_group_member` | CDO_USERGRP | Gruppi di utenti intercambiabili per ruolo. |
 | `role_team_auth` | CDO_AUTH | Quali team sono autorizzati per un ruolo. |
 | `user_process_auth` | USR_AUTH | Peso dell'utente per uno specifico tipo processo; se presente e attivo, prevale su `app_user.weight`. |
-| `substitution` | SOSTITUTI | Sostituzioni: utente, sostituto, dal, al. Il database impedisce date invertite e l'autosostituzione. |
+| `substitution` | SOSTITUTI | Sostituzioni: utente, sostituto, dal, al, chi l'ha decisa e quando (`changed_by`, `changed_at`). Il database impedisce date invertite e l'autosostituzione; il servizio impedisce le sovrapposizioni e gli inizi nel passato. |
+
+### Regole applicate dal servizio
+
+- **Fine di un'appartenenza o di una sostituzione:** se è già iniziata si chiude a ieri (`valid_to`), così resta nello storico; se doveva ancora iniziare si cancella.
+- **Almeno un amministratore:** gli amministratori sono i membri attivi del team di riserva (`WFADM`, da `EngineConfig.fallbackTeamCode`). Ogni modifica di team o utenti verifica, **dentro la stessa transazione**, che ne resti almeno uno attivo; altrimenti tutto torna indietro.
+- **Nuovi utenti e sequenza:** `app_user.id` è una colonna identity. La migrazione inserisce utenti con id esplicito, quindi dopo ogni inserimento così `JdbcOrgWriter` riallinea la sequenza (`setval(pg_get_serial_sequence(...), max(id))`); senza, il primo utente creato dall'applicazione andrebbe in conflitto di chiave. Sugli ambienti già migrati il riallineamento va fatto una volta a mano.
 
 ## 4.4 Schema ewf_core – configurazione tecnica
 
@@ -225,10 +231,18 @@ Un indice unico parziale impone **un solo processo aperto** per (tipo processo, 
 ## 4.9 Ruoli e permessi
 
 - `ewf_owner` è il proprietario di tutte le tabelle. Con lui si creano lo schema e si applicano le migrazioni. Se una tabella viene creata con un altro utente (per esempio l'amministratore `postgres`), va riassegnata a `ewf_owner`.
-- `ewf_app` è l'utente dell'applicazione. Ha solo i permessi che servono, anche **a livello di colonna**: per esempio su `app_user` può aggiornare solo i campi dell'accesso e la data del riepilogo, non il peso o la classe. Sull'audit può solo aggiungere.
+- `ewf_app` è l'utente dell'applicazione. Ha solo i permessi che servono, anche **a livello di colonna**. Sull'audit può solo aggiungere.
 - Le password dei due ruoli non stanno in nessun file: si passano all'applicazione con variabili d'ambiente (`EWF_DB_PASSWORD`).
 
-> **Da sistemare:** i permessi di `ewf_app` sono oggi sparsi negli script delle singole migrazioni e in parte dati a mano sul DEV. Serve uno script unico e completo, da rieseguire in ogni ambiente.
+I permessi di `ewf_app` stanno ora in un unico script, `db/ewf_grants_app.sql` di `ewf-engine`, completo e rieseguibile: si lancia come `ewf_owner` dopo ogni migrazione e in ogni ambiente nuovo. Le scritture concesse sull'organizzazione sono quelle che servono alle funzioni di amministrazione:
+
+| Tabella | Permessi di scrittura di `ewf_app` |
+| --- | --- |
+| `app_user` | INSERT; UPDATE solo su campi dell'accesso, `display_name`, `email`, `sap_user`, `user_class_code`, `can_substitute`, `active`, data del riepilogo. Peso e livelli restano fuori. |
+| `team` | INSERT; UPDATE della sola descrizione. |
+| `team_member` | INSERT, DELETE; UPDATE di `valid_from`, `valid_to`. |
+| `substitution` | INSERT, DELETE; UPDATE di `valid_to`, `changed_by`, `changed_at`. |
+| tabelle runtime del motore | Quelle di processi, task, storico, commenti, allegati, coda; audit solo INSERT. |
 
 ## 4.10 Versioni dello schema
 
@@ -366,6 +380,8 @@ I parametri di un aggancio (`task_hook.config`) che hanno il nome di un campo di
 
 Lato eWF, il job `EWF_START_QUEUE` di eone-connect legge la coda ogni 30 secondi. Con più Tomcat accesi gira su uno solo, grazie a un lock del database.
 
+Il pulsante **Aggiorna** della lista chiama `JobHost.readStartQueueNow(timeout)`: anticipa la prossima esecuzione del job e aspetta al massimo qualche secondo. Le esecuzioni che non trovano nulla non vengono scritte in `job_run`, quindi la fine si riconosce confrontando due fotografie: o cambia l'istante dell'ultima esecuzione a vuoto, o compare una nuova riga in `job_run`. L'esito (`DONE`, `FAILED`, `STILL_RUNNING`, `NOT_ACTIVE`) decide il messaggio all'utente; la lista si rilegge comunque.
+
 ## 7.4 Schede documento
 
 La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per posizione con `/EWF/DOC_INFO`, l'indirizzo del fornitore e il nome della società con `BAPI_VENDOR_GETDETAIL` e `BAPI_COMPANYCODE_GETDETAIL`. Le descrizioni vengono dalla fotografia del processo. Il PDF lo impagina un unico componente comune a tutte le schede (`SheetPdf`, libreria OpenPDF nella stessa versione usata da CaptainCasa).
@@ -376,19 +392,41 @@ La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per p
 
 - `EwfService`: l'unica porta d'ingresso per l'interfaccia. Ogni metodo riceve l'utente, controlla cosa può vedere o fare, e restituisce oggetti pronti per la pagina (`Views`): lista, dettaglio, percorso, storico, allegati…
 - `AuthService`: login, cambio e reimpostazione password, blocco dopo i tentativi falliti.
-- SPI verso il sistema di origine: `DocumentSheets` (schede PDF), `DocumentAttachments` (allegati del documento), `SapGuiLink` (apertura in SAP GUI). Il modulo SAP le realizza; per la Public Edition se ne scriverà un'altra realizzazione.
+- `SubstitutionService`: sostituzioni dell'utente (auto-sostituzione: un solo sostituto, `setMine`/`clearMine`) e, per l'amministratore, di tutti.
+- `AdminService`: tutto ciò che è riservato agli amministratori, ognuno con `requireAdmin` in testa: processi in errore (riprova, conferma dell'esito), elenco e annullamento dei processi, avvio forzato (tipi documento → processi ammessi → avvio), sostituzioni di tutti, utenti, team e appartenenze.
+- In `EwfService`, oltre a lista e dettaglio: `timeline` (dati del Gantt), `infoCounts` (numeri di allegati, commenti e storico per i pulsanti in riga, con una query per tutta la lista), `participated` (processi a cui ho partecipato, con il ruolo avuto). La visibilità di un processo include ora gli amministratori e chi vi ha scritto un commento o caricato un allegato.
+- SPI verso il sistema di origine: `DocumentSheets` (schede PDF), `DocumentAttachments` (allegati del documento), `SapGuiLink` (apertura in SAP GUI). Il modulo SAP realizza le schede e il collegamento SAP GUI; gli allegati del documento hanno solo l'interfaccia. Per la Public Edition se ne scriveranno realizzazioni OData.
 - Errori con codici stabili (`ServiceException`): non trovato, non autorizzato, dati non validi, stato non valido, sistema di origine non disponibile…
 
 ## 8.2 ewfserver
 
 | Elemento | Ruolo |
 | --- | --- |
-| `Outest` | Unica pagina che si può aprire da URL: contiene le altre e gestisce la navigazione (logon → lista → dettaglio). Accetta il collegamento diretto a un task (`Outest.risc?task=<id>`). |
-| `Logon`, `Worklist`, `TaskDetail` | Le pagine: layout XML in `src/main/resources` e classe Java in `…ewfserver.view`. |
+| `Outest` | Unica pagina che si può aprire da URL: contiene le altre e gestisce la navigazione (logon → menu → funzione). Accetta il collegamento diretto a un task (`Outest.risc?task=<id>`), che apre subito il dettaglio. |
+| `Logon`, `Menu` | Accesso in stile ticketing (immagine casuale da `/images/1..10.jpg`) e menu a schede con la sintesi delle attività. |
+| `Worklist`, `TaskDetail`, `ProcessInfo` | Lista con filtri per colonna (`t:gridheader`) e pulsanti in riga; dettaglio (anche in sola consultazione); finestra Allegati / Commenti / Storico / Gantt. |
+| `ProcessList` | Processi a cui ho partecipato e, in modalità amministratore, gestione processi con Annulla (`CancelProcess`). |
+| `AutoSubstitution`, `Substitutions` | Auto-sostituzione e consultazione. |
+| `Errors`, `ForceStart`, `AdminSubstitutions`, `Users`, `Teams` | Funzioni da amministratore. |
+| `GanttSvg` | Disegna il Gantt come SVG lato server, mostrato con `t:svgviewer`. Una riga per persona; scala compressa: lo spazio tra due istanti consecutivi è proporzionale a 1 + ln(1 + minuti), con le attese lunghe segnate `//`. Il suggerimento al passaggio del mouse è il `<title>` SVG di ogni barra. Nessuna libreria esterna. |
 | `EwfApp` | Avvia una volta sola, alla prima richiesta, i servizi condivisi da tutte le sessioni: collegamento al DB, motore, servizi, collegamento a SAP. |
+| `JobHost` | Ospita lo scheduler di eone-connect dentro Tomcat; espone la lettura immediata della coda. |
 | `AppConfig` | Legge la configurazione da un file esterno (`config.properties`) o dalle variabili d'ambiente. Le password le legge **solo** dall'ambiente e ignora quelle scritte nel file. |
 | `EwfSession`, `SessionGuard` | L'utente collegato, tenuto nella sessione; ogni pagina verifica che ci sia. |
 | `SecurityHeadersFilter` | Aggiunge a ogni risposta le intestazioni di sicurezza HTTP (vedi capitolo 9). |
+
+### Convenzioni delle pagine
+
+- Ogni pagina ha un layout XML in `src/main/resources` e una classe in `it.eone.ewf.ewfserver.view`; ogni pagina ha il pulsante « Menu (`IBackToMenu`).
+- **Nomi delle proprietà:** le espressioni delle pagine seguono le regole JavaBeans. Un getter `getFDocument` produce la proprietà `FDocument`, non `fDocument`: per questo i filtri si chiamano `getFilterDocument` e simili. Le espressioni vengono verificate con un controllo automatico (Introspector) prima della consegna.
+- Nelle espressioni si evita la negazione `!`: si usano getter espliciti (`isNotX`).
+
+### Rilascio dal designer CaptainCasa
+
+- **Hot deploy** per le classi del pacchetto `…ewfserver.view` e per le pagine XML: il designer le copia in `eclnthotdeploy/classes`, senza riavviare.
+- **Maven install + Reload** per tutto il resto (moduli `ewf-*`, classi fuori da `view`).
+
+> **Non copiare a mano classi o XML in `WEB-INF/classes`.** Una copia vecchia lì prevale su quella del hot deploy e la pagina sembra non cambiare mai. È successo durante lo sviluppo; la soluzione è stata cancellare le copie, non aggiungere script di copia.
 
 # 9. Sicurezza
 
@@ -397,14 +435,16 @@ La scheda OdA legge l'ordine al momento con `BAPI_PO_GETDETAIL1`, i valori per p
 - **Segreti fuori dai file:** password del DB, di SAP e della posta solo in variabili d'ambiente (in Tomcat nel file `setenv.bat`), mai nel codice, nella configurazione, nel war o in Git.
 - **Minimo privilegio:** l'applicazione usa `ewf_app`, con permessi limitati anche per colonna; l'audit non è modificabile.
 - **Web:** un solo punto d'ingresso (`Outest`); intestazioni di sicurezza (politica dei contenuti, protezione dall'incorporamento in altre pagine); i messaggi d'errore tecnici non arrivano al browser.
+- **Anteprima del designer:** il designer (porta 51000) mostra le pagine dentro un riquadro, che la protezione dall'incorporamento blocca. In sviluppo si imposta `EWF_FRAME_ALLOWED=http://localhost:51000`: il filtro resta attivo e ammette solo quell'origine (validata). In produzione la variabile non si imposta. `EWF_SECURITY_HEADERS=false` spegne tutto ed è sconsigliato.
+- **Funzioni da amministratore:** ogni metodo di `AdminService` verifica l'amministratore lato server; il dettaglio in sola consultazione blocca le scritture anche nel servizio, non solo a video.
 
 # 10. Punti aperti tecnici
 
 | Tema | Stato |
 | --- | --- |
 | Pool di connessioni | Oggi ogni richiesta apre una nuova connessione al DB. Va bene in sviluppo; in produzione serve un pool (quello di Tomcat o una libreria dedicata). |
-| Script dei permessi | Uno script unico e completo per `ewf_app` (vedi 4.9). |
 | Catena di hash nell'audit | Colonne predisposte, calcolo non ancora attivo. |
-| Deploy dal designer CaptainCasa | Funziona con il progetto creato dal designer; il flusso (Maven install, deploy, riavvio) va scritto nella guida di esercizio. |
+| Log su file | Oggi i log vanno nella console di Tomcat; serve un file con rotazione. |
+| Storico delle appartenenze | Una riga per (team, utente): per uno storico completo servirebbe una chiave con la data di inizio. |
 | Versioni delle librerie | OpenPDF va tenuto allineato alla versione portata da CaptainCasa. |
 | Public Edition | Realizzazioni OData delle SPI e dell'esecuzione handler; avvio dagli eventi di business. |
