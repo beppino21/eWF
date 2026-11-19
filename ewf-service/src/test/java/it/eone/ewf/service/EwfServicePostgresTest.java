@@ -577,6 +577,7 @@ public class EwfServicePostgresTest {
         sql("UPDATE ewf_core.process_instance SET status = 'COMPLETED' WHERE id = " + p);
         assertEquals(Code.INVALID_STATE, assertThrows(ServiceException.class,
                 () -> svc.addAttachment(ROSSI, p, "tardi.pdf", "application/pdf", pdf)).code());
+        assertFalse(svc.canAddAttachments(ROSSI, p), "processo concluso: niente nuovi allegati");
     }
 
     @Test
@@ -591,8 +592,15 @@ public class EwfServicePostgresTest {
         assertEquals("D:GOS1", list.get(0).id());
         assertArrayEquals(new byte[]{1, 2, 3}, svc.attachmentContent(BIANCHI, p, "D:GOS1").content());
 
+        assertTrue(svc.canAddAttachments(BIANCHI, p));
         Attachment added = svc.addAttachment(BIANCHI, p, "nota.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8));
         assertEquals("D:GOS2", added.id());
+
+        docAttachments.readOnly = true;
+        assertFalse(svc.canAddAttachments(BIANCHI, p), "sistema di origine in sola consultazione");
+        assertEquals(Code.NOT_SUPPORTED, assertThrows(ServiceException.class,
+                () -> svc.addAttachment(BIANCHI, p, "no.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8))).code());
+        docAttachments.readOnly = false;
         assertEquals("Anna Bianchi", docAttachments.lastUploader, "senza utente SAP passa il nome");
         assertEquals(Code.NOT_FOUND, assertThrows(ServiceException.class, () -> svc.deleteAttachment(BIANCHI, p, "D:GOS2")).code(),
                 "gli allegati del documento non si eliminano da eWF");
@@ -604,6 +612,46 @@ public class EwfServicePostgresTest {
 
         EwfService noBackend = service(EwfService.Config.defaults(), EwfService.Backends.none());
         assertEquals(Code.NOT_SUPPORTED, assertThrows(ServiceException.class, () -> noBackend.attachments(BIANCHI, p)).code());
+    }
+
+    @Test
+    public void allegatiDelDocumentoEDiProcessoInsieme() {
+        long p = atApproval("4500000008");
+        byte[] pdf = {9, 9};
+        Attachment mine = svc.addAttachment(ROSSI, p, "prima.pdf", "application/pdf", pdf);  // ancora PROCESS
+        sql("UPDATE ewf_core.process_type SET attachment_scope = 'BOTH'");
+        docAttachments.readOnly = true;
+        docAttachments.items.add(new DocumentAttachments.Item("GOS1", "offerta.pdf", "application/pdf", 3L, "MROSSI", clock.now));
+        docAttachments.content.put("GOS1", new byte[]{1, 2, 3});
+
+        assertTrue(svc.detail(BIANCHI, p).links().documentAttachments());
+        Views.AttachmentList l = svc.attachmentList(ROSSI, p);
+        assertNull(l.sourceWarning());
+        assertEquals(List.of("D:GOS1", mine.id()), l.items().stream().map(Attachment::id).toList());
+        assertTrue(l.items().get(1).deletable(), "il mio allegato eWF resta eliminabile");
+        assertArrayEquals(new byte[]{1, 2, 3}, svc.attachmentContent(BIANCHI, p, "D:GOS1").content());
+        assertArrayEquals(pdf, svc.attachmentContent(BIANCHI, p, mine.id()).content());
+
+        // con BOTH si puo' allegare anche se SAP e' in sola consultazione: il file va in eWF
+        assertTrue(svc.canAddAttachments(BIANCHI, p));
+        Attachment added = svc.addAttachment(BIANCHI, p, "nota.txt", "text/plain", "x".getBytes(StandardCharsets.UTF_8));
+        assertTrue(added.id().startsWith("P:"));
+        assertEquals(1, docAttachments.items.size(), "niente in SAP");
+
+        // SAP non risponde: restano quelli di eWF, con un avviso
+        docAttachments.down = true;
+        l = svc.attachmentList(BIANCHI, p);
+        assertNotNull(l.sourceWarning());
+        assertEquals(2, l.items().size());
+        assertEquals(-1, svc.infoCounts(BIANCHI, List.of(p)).get(p).attachments(), "SAP giu': numero non noto");
+        docAttachments.down = false;
+        assertEquals(-1, svc.infoCounts(BIANCHI, List.of(p)).get(p).attachments(), "SAP non sa contare: non noto");
+        docAttachments.counting = true;
+        assertEquals(1 + 2, svc.infoCounts(BIANCHI, List.of(p)).get(p).attachments(), "SAP (1) + eWF (2)");
+        docAttachments.counting = false;
+        docAttachments.readOnly = false;
+
+        assertThrows(Exception.class, () -> sql("UPDATE ewf_core.process_type SET attachment_scope = 'ALTRO'"));
     }
 
     // ------------------------------------------------------------------ PDF, SAP GUI, funzioni
@@ -695,9 +743,18 @@ public class EwfServicePostgresTest {
         final List<Item> items = new ArrayList<>();
         final Map<String, byte[]> content = new HashMap<>();
         boolean down;
+        boolean readOnly;
         String lastUploader;
 
         @Override public boolean supports(DocRef doc) { return "F".equals(doc.docType()); }
+        @Override public boolean canAdd(DocRef doc) { return !readOnly; }
+        boolean counting;
+        @Override public Map<DocRef, Integer> counts(java.util.Collection<DocRef> docs) {
+            if (down) throw new IllegalStateException("RFC_COMMUNICATION_FAILURE");
+            Map<DocRef, Integer> m = new HashMap<>();
+            if (counting) for (DocRef d : docs) m.put(d, items.size());
+            return m;
+        }
         @Override public List<Item> list(DocRef doc) {
             if (down) throw new IllegalStateException("RFC_COMMUNICATION_FAILURE");
             return List.copyOf(items);

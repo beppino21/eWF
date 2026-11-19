@@ -5,6 +5,7 @@ import it.eone.ewf.engine.spi.HandlerRegistry;
 import it.eone.ewf.sap.SapDestinations;
 import it.eone.ewf.sap.SapDocumentAdapter;
 import it.eone.ewf.sap.SapHandlerRegistry;
+import it.eone.ewf.sap.attach.SapDocumentAttachments;
 import it.eone.ewf.sap.sheet.SapDocumentSheets;
 import it.eone.ewf.service.EwfService;
 
@@ -33,7 +34,8 @@ record Sap(String destination, HandlerRegistry handlers, DocumentAdapterRegistry
         try {
             SapDestinations.register();
             return new Sap(dest, new SapHandlerRegistry(dest), SapDocumentAdapter.registry(dest),
-                    new EwfService.Backends(null, SapDocumentSheets.forDestination(dest), null));
+                    new EwfService.Backends(SapDocumentAttachments.forDestination(dest),
+                            SapDocumentSheets.forDestination(dest), null));
         } catch (LinkageError | RuntimeException e) {
             System.err.println("[EwfApp] SAP " + dest + " non disponibile (" + e + "): avvio senza SAP."
                     + " JCo (sapjco3.jar e libreria nativa) va nella lib di Tomcat.");

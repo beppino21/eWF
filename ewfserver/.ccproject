@@ -15,5 +15,5 @@
          webhostport="localhost:${deploytomcatport}">
     <deploycopyinfo fromdir="${project}/target/${projectname}"
                     todir="${projectdeploy}"/>
-    <hotdeploymentpackage name="*"/>
+    <hotdeploymentpackage name="it.eone.ewf.ewfserver.view"/>
 </project>

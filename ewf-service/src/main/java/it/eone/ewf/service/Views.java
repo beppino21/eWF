@@ -116,6 +116,9 @@ public final class Views {
     public record Attachment(String id, String fileName, String mimeType, Long sizeBytes, String uploadedBy,
                              Instant uploadedAt, boolean deletable) {}
 
+    /** Allegati di un processo; sourceWarning: il sistema di origine non ha risposto (solo con BOTH). */
+    public record AttachmentList(List<Attachment> items, String sourceWarning) {}
+
     public record FileContent(String fileName, String mimeType, byte[] content) {}
 
     /** Utente proposto per lo spostamento di un task. */

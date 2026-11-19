@@ -73,6 +73,9 @@
 <t:gridcol id="f_c1" text="File" width="100%" >
 <t:label id="f_c1l" text=".{name}" />
 </t:gridcol>
+<t:gridcol id="f_c0" rendered="#{d.ProcessInfoUI.originVisible}" text="Origine" width="70" >
+<t:label id="f_c0l" text=".{origin}" />
+</t:gridcol>
 <t:gridcol id="f_c2" text="Dim." width="80" >
 <t:label id="f_c2l" align="right" text=".{size}" />
 </t:gridcol>

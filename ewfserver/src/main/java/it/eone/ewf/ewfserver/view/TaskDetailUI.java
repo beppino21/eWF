@@ -64,6 +64,8 @@ public class TaskDetailUI extends PageBean implements Serializable {
     private String m_sheet;
     private String m_newComment;
     private String m_attachmentsMessage;
+    private boolean m_attachmentsFailed;
+    private boolean m_originVisible;
 
     private final Trigger m_downloadTrigger = new Trigger();
     private String m_downloadUrl;
@@ -90,6 +92,8 @@ public class TaskDetailUI extends PageBean implements Serializable {
     private boolean m_readOnly;
 
     public boolean isEditable() { return !m_readOnly; }
+    private boolean m_canUpload;
+    public boolean isUploadAllowed() { return !m_readOnly && m_canUpload; }
 
     private EwfService svc() { return EwfApp.get().service(); }
     private long uid() { return EwfSession.instance().userId(); }
@@ -102,7 +106,13 @@ public class TaskDetailUI extends PageBean implements Serializable {
             Statusbar.outputError(e.getMessage());
             return;
         }
+        try {
+            m_canUpload = !m_readOnly && svc().canAddAttachments(uid(), m_processId);
+        } catch (ServiceException e) {
+            m_canUpload = false;
+        }
         Header h = m_detail.header();
+        m_originVisible = "BOTH".equals(h.attachmentScope());
         m_header.getItems().clear();
         addField("Processo", h.processTypeText());
         addField("Documento", h.docType() + " " + h.documentKey());
@@ -144,9 +154,13 @@ public class TaskDetailUI extends PageBean implements Serializable {
     private void loadAttachments() {
         m_attachments.getItems().clear();
         m_attachmentsMessage = null;
+        m_attachmentsFailed = false;
         try {
-            for (Attachment a : svc().attachments(uid(), m_processId)) m_attachments.getItems().add(new AttachmentItem(a));
+            AttachmentList list = svc().attachmentList(uid(), m_processId);
+            for (Attachment a : list.items()) m_attachments.getItems().add(new AttachmentItem(a));
+            m_attachmentsMessage = list.sourceWarning();               // con BOTH: SAP non risponde, eWF si'
         } catch (ServiceException e) {
+            m_attachmentsFailed = true;
             m_attachmentsMessage = e.getMessage();                    // es. sistema di origine non raggiungibile
         }
     }
@@ -344,6 +358,8 @@ public class TaskDetailUI extends PageBean implements Serializable {
     public boolean isPlainDecision() { return isCanAct() && myTask().options().isEmpty(); }
     public boolean isHasFunctions() { return isCanAct() && !myTask().functions().isEmpty(); }
     public boolean isSapGui() { return m_detail != null && m_detail.links().sapGui(); }
+    public boolean isOriginVisible() { return m_originVisible; }
+
     public boolean isAttachmentsMessageVisible() { return m_attachmentsMessage != null; }
 
     /** I pulsanti delle schede stanno in "La tua attivita'"; nel riquadro Documento solo se non c'e' un'attivita'. */
@@ -354,12 +370,12 @@ public class TaskDetailUI extends PageBean implements Serializable {
     public String getHistoryTitle() { return paneTitle("Storico", m_history.getItems().size()); }
     public String getCommentsTitle() { return paneTitle("Commenti", m_comments.getItems().size()); }
     public String getAttachmentsTitle() {
-        return m_attachmentsMessage != null ? "Allegati \u2014 non disponibili" : paneTitle("Allegati", m_attachments.getItems().size());
+        return m_attachmentsFailed ? "Allegati \u2014 non disponibili" : paneTitle("Allegati", m_attachments.getItems().size());
     }
     public String getPathColor() { return paneColor(m_path.getItems().size()); }
     public String getHistoryColor() { return paneColor(m_history.getItems().size()); }
     public String getCommentsColor() { return paneColor(m_comments.getItems().size()); }
-    public String getAttachmentsColor() { return m_attachmentsMessage != null ? "#B00020" : paneColor(m_attachments.getItems().size()); }
+    public String getAttachmentsColor() { return m_attachmentsFailed ? "#B00020" : paneColor(m_attachments.getItems().size()); }
 
     private static String paneTitle(String name, int n) { return n == 0 ? name + " \u2014 nessuno" : name + " (" + n + ")"; }
     /** Grigio se vuoto, colore normale del tema altrimenti. */
@@ -475,6 +491,7 @@ public class TaskDetailUI extends PageBean implements Serializable {
         private final Attachment a;
         AttachmentItem(Attachment a) { this.a = a; }
         public String getName() { return a.fileName(); }
+        public String getOrigin() { return a.id().startsWith("D:") ? "SAP" : "eWF"; }
         public String getSize() { return size(a.sizeBytes()); }
         public String getBy() { return nvl(a.uploadedBy()); }
         public String getWhen() { return ts(a.uploadedAt()); }

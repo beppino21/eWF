@@ -18,6 +18,11 @@ public final class JcoRfc implements Rfc {
 
     @Override
     public Result call(String function, Map<String, String> imports) {
+        return call(function, imports, Map.of());
+    }
+
+    @Override
+    public Result call(String function, Map<String, String> imports, Map<String, List<Map<String, String>>> tables) {
         JCoDestination dest;
         JCoFunction f;
         try {
@@ -28,6 +33,13 @@ public final class JcoRfc implements Rfc {
         }
         if (f == null) throw new FunctionMissing(function);
         imports.forEach((k, v) -> f.getImportParameterList().setValue(k, v));
+        tables.forEach((name, rows) -> {
+            JCoTable t = f.getTableParameterList().getTable(name);
+            for (Map<String, String> row : rows) {
+                t.appendRow();
+                row.forEach(t::setValue);
+            }
+        });
         try {
             f.execute(dest);
         } catch (JCoException e) {
@@ -39,6 +51,22 @@ public final class JcoRfc implements Rfc {
                 JCoParameterList ex = f.getExportParameterList();
                 if (ex == null || !ex.getMetaData().hasField(name)) return Map.of();
                 return record(ex.getStructure(name));
+            }
+
+            @Override
+            public String value(String name) {
+                JCoParameterList ex = f.getExportParameterList();
+                if (ex == null || !ex.getMetaData().hasField(name)) return "";
+                String v = ex.getString(name);
+                return v == null ? "" : v.trim();
+            }
+
+            @Override
+            public byte[] bytes(String name) {
+                JCoParameterList ex = f.getExportParameterList();
+                if (ex == null || !ex.getMetaData().hasField(name)) return new byte[0];
+                byte[] b = ex.getByteArray(name);
+                return b == null ? new byte[0] : b;
             }
 
             @Override

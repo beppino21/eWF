@@ -146,6 +146,9 @@
 <t:gridcol id="f_c1" text="File" width="100%" >
 <t:label id="f_c1l" text=".{name}" />
 </t:gridcol>
+<t:gridcol id="f_c0" rendered="#{d.TaskDetailUI.originVisible}" text="Origine" width="70" >
+<t:label id="f_c0l" text=".{origin}" />
+</t:gridcol>
 <t:gridcol id="f_c2" text="Dim." width="80" >
 <t:label id="f_c2l" align="right" text=".{size}" />
 </t:gridcol>
@@ -163,7 +166,7 @@
 </t:gridcol>
 </t:fixgrid>
 </t:row>
-<t:row id="f_2" rendered="#{d.TaskDetailUI.editable}" >
+<t:row id="f_2" rendered="#{d.TaskDetailUI.uploadAllowed}" >
 <t:fileuploadbutton id="f_2u" actionListener="#{d.TaskDetailUI.onUpload}" maxfilesize="20000000" multiselect="true" text="Allega file..." width="160" />
 </t:row>
 </t:foldablepane>

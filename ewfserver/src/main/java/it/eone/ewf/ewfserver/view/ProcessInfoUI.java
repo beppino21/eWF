@@ -6,6 +6,7 @@ import it.eone.ewf.ewfserver.context.SessionGuard;
 import it.eone.ewf.service.EwfService;
 import it.eone.ewf.service.ServiceException;
 import it.eone.ewf.service.Views.Attachment;
+import it.eone.ewf.service.Views.AttachmentList;
 import it.eone.ewf.service.Views.Comment;
 import it.eone.ewf.service.Views.FileContent;
 import it.eone.ewf.service.Views.HistoryEntry;
@@ -41,6 +42,7 @@ public class ProcessInfoUI extends PageBean implements Serializable {
 
     private long m_processId;
     private boolean m_readOnly;
+    private boolean m_canUpload;
     private Mode m_mode = Mode.HISTORY;
     private String m_title = "";
 
@@ -50,6 +52,8 @@ public class ProcessInfoUI extends PageBean implements Serializable {
     private String m_ganttSvg;
     private int m_ganttHeight = 60;
     private String m_attachmentsMessage;
+    private boolean m_attachmentsFailed;
+    private boolean m_originVisible;
     private String m_newComment;
     private final Trigger m_downloadTrigger = new Trigger();
     private String m_downloadUrl;
@@ -65,6 +69,11 @@ public class ProcessInfoUI extends PageBean implements Serializable {
         m_processId = processId;
         m_readOnly = readOnly;
         m_mode = mode;
+        try {
+            m_canUpload = !readOnly && svc().canAddAttachments(uid(), processId);
+        } catch (ServiceException e) {
+            m_canUpload = false;
+        }
         loadDetail();
         loadAttachments();
         buildGantt();
@@ -78,6 +87,7 @@ public class ProcessInfoUI extends PageBean implements Serializable {
         m_comments.getItems().clear();
         try {
             ProcessDetail d = svc().detail(uid(), m_processId);
+            m_originVisible = "BOTH".equals(d.header().attachmentScope());
             m_title = d.header().processTypeText() + " - " + d.header().docType() + " " + d.header().documentKey();
             for (HistoryEntry h : d.history()) m_history.getItems().add(new TaskDetailUI.HistoryItem(h));
             for (Comment c : d.comments()) m_comments.getItems().add(new TaskDetailUI.CommentItem(c));
@@ -89,9 +99,13 @@ public class ProcessInfoUI extends PageBean implements Serializable {
     private void loadAttachments() {
         m_attachments.getItems().clear();
         m_attachmentsMessage = null;
+        m_attachmentsFailed = false;
         try {
-            for (Attachment a : svc().attachments(uid(), m_processId)) m_attachments.getItems().add(new AttachmentItem(a));
+            AttachmentList list = svc().attachmentList(uid(), m_processId);
+            for (Attachment a : list.items()) m_attachments.getItems().add(new AttachmentItem(a));
+            m_attachmentsMessage = list.sourceWarning();               // con BOTH: SAP non risponde, eWF si'
         } catch (ServiceException e) {
+            m_attachmentsFailed = true;
             m_attachmentsMessage = e.getMessage();
         }
     }
@@ -165,7 +179,7 @@ public class ProcessInfoUI extends PageBean implements Serializable {
     public boolean isAttachmentsMode() { return m_mode == Mode.ATTACHMENTS; }
     public boolean isEditable() { return !m_readOnly; }
     public boolean isCommentsEditRow() { return isCommentsMode() && !m_readOnly; }
-    public boolean isUploadRow() { return isAttachmentsMode() && !m_readOnly; }
+    public boolean isUploadRow() { return isAttachmentsMode() && !m_readOnly && m_canUpload; }
     public boolean isAttachmentsMessageRow() { return isAttachmentsMode() && m_attachmentsMessage != null; }
     private String tabBg(Mode m) { return m_mode == m ? "#BBDEFB" : null; }
     public String getHistoryBg() { return tabBg(Mode.HISTORY); }
@@ -175,13 +189,15 @@ public class ProcessInfoUI extends PageBean implements Serializable {
     public String getHistoryText() { return "Storico (" + m_history.getItems().size() + ")"; }
     public String getCommentsText() { return "Commenti (" + m_comments.getItems().size() + ")"; }
     public String getAttachmentsText() {
-        return m_attachmentsMessage != null ? "Allegati (!)" : "Allegati (" + m_attachments.getItems().size() + ")";
+        return m_attachmentsFailed ? "Allegati (!)" : "Allegati (" + m_attachments.getItems().size() + ")";
     }
     public FIXGRIDListBinding<TaskDetailUI.HistoryItem> getHistory() { return m_history; }
     public FIXGRIDListBinding<TaskDetailUI.CommentItem> getComments() { return m_comments; }
     public FIXGRIDListBinding<AttachmentItem> getAttachments() { return m_attachments; }
     public String getGanttSvg() { return m_ganttSvg; }
     public String getGanttHeight() { return String.valueOf(m_ganttHeight); }
+    public boolean isOriginVisible() { return m_originVisible; }
+
     public boolean isAttachmentsMessageVisible() { return m_attachmentsMessage != null; }
     public String getAttachmentsMessage() { return m_attachmentsMessage; }
     public String getNewComment() { return m_newComment; }
@@ -196,6 +212,7 @@ public class ProcessInfoUI extends PageBean implements Serializable {
         private final Attachment a;
         AttachmentItem(Attachment a) { this.a = a; }
         public String getName() { return a.fileName(); }
+        public String getOrigin() { return a.id().startsWith("D:") ? "SAP" : "eWF"; }
         public String getSize() { return TaskDetailUI.size(a.sizeBytes()); }
         public String getBy() { return TaskDetailUI.nvl(a.uploadedBy()); }
         public String getWhen() { return TaskDetailUI.ts(a.uploadedAt()); }

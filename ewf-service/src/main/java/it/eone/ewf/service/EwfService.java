@@ -191,7 +191,7 @@ public final class EwfService {
         String sapUser = users.byId(userId).map(User::sapUser).orElse(null);
         Links links = new Links(sheetViews(doc),
                 sapUser != null && !sapUser.isBlank() && backends.sapGui() != null && backends.sapGui().supports(doc),
-                "DOCUMENT".equals(h.attachmentScope()) && backends.attachments() != null && backends.attachments().supports(doc));
+                hasDocumentScope(h.attachmentScope()) && backends.attachments() != null && backends.attachments().supports(doc));
         return new ProcessDetail(h, path, history(processId), comments(userId, processId), my, links);
     }
 
@@ -233,9 +233,10 @@ public final class EwfService {
         if (processIds == null || processIds.isEmpty()) return out;
         List<Long> visible = processIds.stream().distinct().filter(p -> canView(userId, p)).toList();
         if (visible.isEmpty()) return out;
+        Map<Long, Integer> localCounts = new HashMap<>();
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT p.id, pt.attachment_scope,
+                    SELECT p.id, pt.attachment_scope, p.backend_code, p.doc_type, p.document_key,
                            (SELECT count(*) FROM ewf_core.attachment a
                              WHERE a.process_id = p.id AND a.provider = 'LOCAL' AND a.deleted_at IS NULL),
                            (SELECT count(*) FROM ewf_core.comment pc WHERE pc.process_id = p.id),
@@ -245,14 +246,45 @@ public final class EwfService {
                       JOIN ewf_core.process_type pt ON pt.code = p.process_type_code
                      WHERE p.id = ANY (?)""")) {
                 ps.setArray(1, c.createArrayOf("bigint", visible.toArray()));
+                Map<Long, DocRef> docs = new HashMap<>();
                 try (ResultSet rs = ps.executeQuery()) {
                     while (rs.next()) {
-                        boolean document = "DOCUMENT".equals(rs.getString(2));
-                        out.put(rs.getLong(1), new InfoCounts(document ? -1 : rs.getInt(3), rs.getInt(4), rs.getInt(5)));
+                        String scope = rs.getString(2);
+                        boolean document = hasDocumentScope(scope);
+                        int local = hasLocalScope(scope) ? rs.getInt(6) : 0;
+                        long id = rs.getLong(1);
+                        out.put(id, new InfoCounts(document ? -1 : local, rs.getInt(7), rs.getInt(8)));
+                        if (document) docs.put(id, new DocRef(rs.getString(3), rs.getString(4), rs.getString(5)));
+                        if (document) localCounts.put(id, local);
                     }
                 }
+                addDocumentCounts(out, docs, localCounts);
                 return out;
             }
+        });
+    }
+
+    /**
+     * Allegati del documento: una sola chiamata al sistema di origine per tutta la pagina. Se non risponde, o non
+     * sa contare, il numero resta -1 (pulsante sempre attivo): la lista non deve mai fallire per questo.
+     */
+    private void addDocumentCounts(Map<Long, InfoCounts> out, Map<Long, DocRef> docs, Map<Long, Integer> local) {
+        DocumentAttachments da = backends.attachments();
+        if (docs.isEmpty() || da == null) return;
+        List<DocRef> supported = docs.values().stream().filter(da::supports).distinct().toList();
+        if (supported.isEmpty()) return;
+        Map<DocRef, Integer> counts;
+        try {
+            counts = da.counts(supported);
+        } catch (RuntimeException e) {
+            return;
+        }
+        if (counts == null) return;
+        docs.forEach((id, doc) -> {
+            Integer n = counts.get(doc);
+            if (n == null) return;
+            InfoCounts c = out.get(id);
+            out.put(id, new InfoCounts(n + local.getOrDefault(id, 0), c.comments(), c.history()));
         });
     }
 
@@ -550,15 +582,37 @@ public final class EwfService {
     // Allegati: in eWF (PROCESS) o nel sistema di origine (DOCUMENT), secondo il tipo di processo
     // =====================================================================
 
-    public List<Attachment> attachments(long userId, long processId) {
+    /**
+     * Allegati del processo. Con attachment_scope BOTH l'elenco unisce quelli del documento e quelli in eWF; se il
+     * sistema di origine non risponde, si restituiscono quelli di eWF con un avviso (sourceWarning). Con DOCUMENT
+     * soltanto, un sistema di origine non disponibile e' un errore.
+     */
+    public AttachmentList attachmentList(long userId, long processId) {
         requireView(userId, processId);
         Scope s = scope(processId);
+        List<Attachment> out = new ArrayList<>();
+        String warning = null;
         if (s.document()) {
-            DocumentAttachments da = documentAttachments(s.doc());
-            List<DocumentAttachments.Item> items = backend(() -> da.list(s.doc()));
-            return items.stream().map(i -> new Attachment("D:" + i.id(), i.fileName(), i.mimeType(), i.sizeBytes(),
-                    i.createdBy(), i.createdAt(), false)).toList();
+            try {
+                DocumentAttachments da = documentAttachments(s.doc());
+                List<DocumentAttachments.Item> items = backend(() -> da.list(s.doc()));
+                for (DocumentAttachments.Item i : items)
+                    out.add(new Attachment("D:" + i.id(), i.fileName(), i.mimeType(), i.sizeBytes(),
+                            i.createdBy(), i.createdAt(), false));
+            } catch (ServiceException e) {
+                if (!s.local()) throw e;
+                warning = "Allegati del documento non disponibili: " + e.getMessage();
+            }
         }
+        if (s.local()) out.addAll(localAttachments(userId, processId, s));
+        return new AttachmentList(out, warning);
+    }
+
+    public List<Attachment> attachments(long userId, long processId) {
+        return attachmentList(userId, processId).items();
+    }
+
+    private List<Attachment> localAttachments(long userId, long processId, Scope s) {
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
                     SELECT a.id, a.filename, a.mime_type, a.size_bytes, u.display_name, a.uploaded_at, a.uploaded_by
@@ -589,6 +643,7 @@ public final class EwfService {
             byte[] content = backend(() -> da.read(s.doc(), id));
             return new FileContent(item.fileName(), mimeOrDefault(item.mimeType()), content);
         }
+        if (!s.local()) throw new ServiceException(Code.NOT_FOUND, "Allegato non trovato");
         long id = processAttachmentId(attachmentId);
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
@@ -606,6 +661,18 @@ public final class EwfService {
         });
     }
 
+    /**
+     * Se l'utente puo' aggiungere allegati al processo: per gli allegati in eWF a processo aperto; per quelli del
+     * documento se il sistema di origine li accetta.
+     */
+    public boolean canAddAttachments(long userId, long processId) {
+        requireView(userId, processId);
+        Scope s = scope(processId);
+        if (s.local()) return s.running();
+        DocumentAttachments da = backends.attachments();
+        return da != null && da.supports(s.doc()) && da.canAdd(s.doc());
+    }
+
     public Attachment addAttachment(long userId, long processId, String fileName, String mimeType, byte[] content) {
         if (content == null || content.length == 0) throw new ServiceException(Code.INVALID, "Il file e' vuoto");
         if (content.length > config.maxAttachmentBytes())
@@ -614,8 +681,10 @@ public final class EwfService {
         String mime = mimeOrDefault(mimeType);
         requireView(userId, processId);
         Scope s = scope(processId);
-        if (s.document()) {
+        if (!s.local()) {   // solo DOCUMENT: il file va nel sistema di origine; con BOTH resta in eWF
             DocumentAttachments da = documentAttachments(s.doc());
+            if (!da.canAdd(s.doc()))
+                throw new ServiceException(Code.NOT_SUPPORTED, "Il sistema di origine non accetta allegati da eWF");
             Optional<User> u = users.byId(userId);
             String id = backend(() -> da.add(s.doc(), name, mime, content,
                     u.map(User::sapUser).orElse(null), u.map(User::displayName).orElse(null)));
@@ -676,7 +745,12 @@ public final class EwfService {
         if (n == 0) throw new ServiceException(Code.NOT_AUTHORIZED, "Si possono eliminare solo i propri allegati");
     }
 
-    private record Scope(boolean document, boolean running, DocRef doc) {}
+    /** document: allegati del sistema di origine; local: allegati in eWF. BOTH = entrambi. */
+    private record Scope(boolean document, boolean local, boolean running, DocRef doc) {}
+
+    static boolean hasDocumentScope(String scope) { return "DOCUMENT".equals(scope) || "BOTH".equals(scope); }
+
+    static boolean hasLocalScope(String scope) { return !"DOCUMENT".equals(scope); }
 
     private Scope scope(long processId) {
         return db.with(c -> {
@@ -688,7 +762,8 @@ public final class EwfService {
                 try (ResultSet rs = ps.executeQuery()) {
                     if (!rs.next()) throw ServiceException.of(Code.NOT_FOUND, "Processo %d inesistente", processId);
                     String st = rs.getString(2);
-                    return new Scope("DOCUMENT".equals(rs.getString(1)), "RUNNING".equals(st) || "SUSPENDED".equals(st),
+                    String scope = rs.getString(1);
+                    return new Scope(hasDocumentScope(scope), hasLocalScope(scope), "RUNNING".equals(st) || "SUSPENDED".equals(st),
                             new DocRef(rs.getString(3), rs.getString(4), rs.getString(5)));
                 }
             }

@@ -1,7 +1,9 @@
 package it.eone.ewf.service.spi;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Allegati del documento nel sistema di origine (attachment_scope = DOCUMENT).
@@ -19,6 +21,15 @@ public interface DocumentAttachments {
     List<Item> list(DocRef doc);
 
     byte[] read(DocRef doc, String id);
+
+    /**
+     * Numero di allegati per piu' documenti in una sola chiamata (per i pulsanti della lista). Chiave della mappa:
+     * il DocRef ricevuto. Un documento assente dalla mappa = numero non noto. Default: nessun conteggio.
+     */
+    default Map<DocRef, Integer> counts(Collection<DocRef> docs) { return Map.of(); }
+
+    /** Se il sistema di origine accetta nuovi allegati da eWF per questo documento. */
+    default boolean canAdd(DocRef doc) { return true; }
 
     /**
      * Aggiunge un allegato. sapUser: utente SAP di chi carica, se noto (per la traccia nel sistema di origine);
