@@ -208,6 +208,12 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
                 ui.prepare(back);
                 m_contentUI = ui;
             }
+            case MenuUI.DESIGNER -> {
+                if (!m_admin) return;
+                DesignerUI ui = new DesignerUI();
+                ui.prepare(back);
+                m_contentUI = ui;
+            }
             case MenuUI.TEAMS -> {
                 if (!m_admin) return;
                 TeamsUI ui = new TeamsUI();

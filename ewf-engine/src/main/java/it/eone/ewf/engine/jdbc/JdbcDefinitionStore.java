@@ -94,7 +94,7 @@ public final class JdbcDefinitionStore implements DefinitionStore {
     }
 
     /** Lettura diretta, senza cache (usata anche dalla validazione delle bozze). */
-    ProcessVersion load(long versionId) {
+    public ProcessVersion load(long versionId) {
         return db.with(c -> {
             String type;
             int versionNo;

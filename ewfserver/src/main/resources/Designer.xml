@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="ds_0" beanbinding="#{d.DesignerUI}" />
+<t:rowtitlebar id="ds_1" text="Disegno processi" />
+<t:rowheader id="ds_h" coldistance="6" >
+<t:button id="ds_back" actionListener="#{d.DesignerUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="ds_hd" width="100%" />
+<t:button id="ds_ref" actionListener="#{d.DesignerUI.onRefresh}" text="Aggiorna" width="90" />
+</t:rowheader>
+<t:rowbodypane id="ds_body" padding="14" >
+<t:row id="ds_r" >
+
+<!-- ===== Tipi processo e versioni ===== -->
+<t:pane id="ds_l" height="100%" rowalignmenty="top" rowdistance="10" width="470" >
+<t:row id="ds_l1" >
+<t:label id="ds_l1l" font="weight:bold" text="Tipi processo" />
+</t:row>
+<t:row id="ds_l2" >
+<t:fixgrid id="ds_tg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.DesignerUI.types}" sbvisibleamount="12" width="100%" >
+<t:gridcol id="ds_tc1" text="Codice" width="150" >
+<t:label id="ds_tc1l" font="weight:bold" text=".{code}" />
+</t:gridcol>
+<t:gridcol id="ds_tc2" text="Descrizione" width="100%" >
+<t:label id="ds_tc2l" text=".{description}" />
+</t:gridcol>
+<t:gridcol id="ds_tc3" text="Attiva" width="55" >
+<t:label id="ds_tc3l" align="center" background=".{activeColor}" text=".{active}" />
+</t:gridcol>
+<t:gridcol id="ds_tc4" text="Bozze" width="50" >
+<t:label id="ds_tc4l" align="right" text=".{drafts}" />
+</t:gridcol>
+<t:gridcol id="ds_tc5" text="In corso" width="60" >
+<t:label id="ds_tc5l" align="right" text=".{running}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="ds_l3" rendered="#{d.DesignerUI.typeSelected}" >
+<t:label id="ds_l3l" font="weight:bold" text="#{d.DesignerUI.versionsTitle}" />
+</t:row>
+<t:row id="ds_l4" rendered="#{d.DesignerUI.typeSelected}" >
+<t:fixgrid id="ds_vg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.DesignerUI.versions}" sbvisibleamount="8" width="100%" >
+<t:gridcol id="ds_vc1" text="Vers." width="50" >
+<t:label id="ds_vc1l" align="right" font="weight:bold" text=".{versionNo}" />
+</t:gridcol>
+<t:gridcol id="ds_vc2" text="Stato" width="75" >
+<t:label id="ds_vc2l" align="center" background=".{statusColor}" text=".{status}" />
+</t:gridcol>
+<t:gridcol id="ds_vc3" text="Creata" width="90" >
+<t:label id="ds_vc3l" text=".{created}" />
+</t:gridcol>
+<t:gridcol id="ds_vc4" text="Attivata" width="90" >
+<t:label id="ds_vc4l" text=".{activated}" />
+</t:gridcol>
+<t:gridcol id="ds_vc5" text="Step" width="45" >
+<t:label id="ds_vc5l" align="right" text=".{steps}" />
+</t:gridcol>
+<t:gridcol id="ds_vc6" text="In corso" width="100%" >
+<t:label id="ds_vc6l" align="right" text=".{running}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:pane>
+<t:coldistance id="ds_cd" width="16" />
+
+<!-- ===== Versione selezionata ===== -->
+<t:pane id="ds_p" height="100%" rowalignmenty="top" rowdistance="8" width="100%" >
+<t:row id="ds_hint" rendered="#{d.DesignerUI.noVersion}" >
+<t:label id="ds_hintl" foreground="#777777" text="Scegliere un tipo processo e una sua versione per vederne il flusso." />
+</t:row>
+<t:row id="ds_p1" rendered="#{d.DesignerUI.versionSelected}" >
+<t:label id="ds_p1l" font="size:14;weight:bold;color:#1F4E79" text="#{d.DesignerUI.versionTitle}" />
+</t:row>
+<t:row id="ds_p2" rendered="#{d.DesignerUI.versionSelected}" >
+<t:label id="ds_p2l" foreground="#546E7A" text="#{d.DesignerUI.versionInfo}" />
+</t:row>
+<t:row id="ds_p3" rendered="#{d.DesignerUI.noProblems}" >
+<t:label id="ds_p3l" font="weight:bold;color:#2E7D32" text="Validazione: nessun problema" />
+</t:row>
+<t:row id="ds_p4" rendered="#{d.DesignerUI.withProblems}" >
+<t:fixgrid id="ds_pg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.DesignerUI.problems}" sbvisibleamount="6" width="100%" >
+<t:gridcol id="ds_pc1" text="Gravità" width="80" >
+<t:label id="ds_pc1l" align="center" background=".{color}" text=".{severity}" />
+</t:gridcol>
+<t:gridcol id="ds_pc2" text="Step" width="55" >
+<t:label id="ds_pc2l" align="right" text=".{step}" />
+</t:gridcol>
+<t:gridcol id="ds_pc3" text="Problema" width="100%" >
+<t:label id="ds_pc3l" text=".{text}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="ds_p5" rendered="#{d.DesignerUI.withDiagram}" >
+<t:scrollpane id="ds_sp" height="100%" width="100%" >
+<t:row id="ds_spr" >
+<t:svgviewer id="ds_sv" height="#{d.DesignerUI.svgHeight}" svg="#{d.DesignerUI.svg}" svgheight="#{d.DesignerUI.svgHeight}" svgwidth="#{d.DesignerUI.svgWidth}" width="#{d.DesignerUI.svgWidth}" />
+</t:row>
+</t:scrollpane>
+</t:row>
+</t:pane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

@@ -8,6 +8,7 @@ import it.eone.ewf.engine.jdbc.JdbcUserDirectory;
 import it.eone.ewf.engine.memory.RateCurrencyConverter;
 import it.eone.ewf.ewfserver.config.AppConfig;
 import it.eone.ewf.service.AdminService;
+import it.eone.ewf.service.DesignerService;
 import it.eone.ewf.service.EwfService;
 import it.eone.ewf.service.SubstitutionService;
 import it.eone.ewf.service.auth.AuthService;
@@ -45,6 +46,7 @@ public final class EwfApp {
     private final EwfService service;
     private final SubstitutionService substitutions;
     private final AdminService admin;
+    private final DesignerService designer;
     private final AuthService auth;
     private final ZoneId zone;
     private final String sapDestination;
@@ -99,6 +101,7 @@ public final class EwfApp {
         substitutions = new SubstitutionService(db, clock, zone);
         // Amministratori eWF = membri del team di riserva del motore (WFADM): gli stessi che ricevono i task orfani.
         admin = new AdminService(engine, db, EngineConfig.defaults().fallbackTeamCode(), clock, zone);
+        designer = new DesignerService(db, admin);
         System.out.println("[EwfApp] Avviato: DB " + url + " (" + user + ")"
                 + (sapDestination == null ? " - senza SAP" : " - SAP " + sapDestination));
     }
@@ -106,6 +109,7 @@ public final class EwfApp {
     public EwfService service() { return service; }
     public SubstitutionService substitutions() { return substitutions; }
     public AdminService admin() { return admin; }
+    public DesignerService designer() { return designer; }
     public WorkflowEngine engine() { return engine; }
     public DataSource dataSource() { return dataSource; }
     public AuthService auth() { return auth; }

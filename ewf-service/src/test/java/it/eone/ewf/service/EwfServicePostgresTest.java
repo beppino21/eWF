@@ -349,6 +349,43 @@ public class EwfServicePostgresTest {
     AdminService admin() { return new AdminService(engine, db, "WFADM", clock, ROME); }
 
     @Test
+    void designerConsultaTipiVersioniEValidazione() {
+        DesignerService d = new DesignerService(db, admin());
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> d.types(ROSSI)).code());
+
+        DesignerService.TypeRow t = d.types(VERDI).stream().filter(x -> x.code().equals(ODA)).findFirst().orElseThrow();
+        assertEquals(1, t.activeVersionNo());
+        assertEquals(0, t.drafts());
+
+        // una bozza rotta: lo step 30 manda a uno step inesistente
+        JdbcDefinitionWriter defs = new JdbcDefinitionWriter(db);
+        long draft = defs.saveVersion(new ProcessVersion(2, ODA, 2, null, List.of(
+                new StepDef(10, true, JoinPolicy.ALL, 20, null, null,
+                        List.of(task(201, "Richiesta", null, AssigneeMode.STARTER, Interaction.WEB))),
+                new StepDef(20, false, JoinPolicy.ALL, 99, 10, null,
+                        List.of(task(202, "Approvazione", "APPROVATORE", AssigneeMode.RULES, Interaction.WEB))))), false);
+        long running = atApproval("4500000077");
+
+        List<DesignerService.VersionRow> vs = d.versions(VERDI, ODA);
+        assertEquals(List.of(2, 1), vs.stream().map(DesignerService.VersionRow::versionNo).toList(), "dalla piu' recente");
+        assertEquals("DRAFT", vs.get(0).status());
+        assertEquals("ACTIVE", vs.get(1).status());
+        assertTrue(vs.get(1).running() >= 1, "processo in corso sulla versione attiva");
+        assertEquals(1, d.types(VERDI).stream().filter(x -> x.code().equals(ODA)).findFirst().orElseThrow().drafts());
+
+        DesignerService.VersionView ok = d.view(VERDI, vs.get(1).id());
+        assertNotNull(ok.definition());
+        assertFalse(ok.hasErrors(), ok.problems().toString());
+        assertEquals("Approvazione OdA", ok.typeDescription());
+
+        DesignerService.VersionView bad = d.view(VERDI, draft);
+        assertTrue(bad.hasErrors(), "step 20 verso uno step inesistente");
+        assertTrue(bad.problems().stream().anyMatch(p -> p.isError() && Integer.valueOf(20).equals(p.stepNo())), bad.problems().toString());
+        assertEquals(Code.NOT_FOUND, assertThrows(ServiceException.class, () -> d.view(VERDI, 999_999)).code());
+        assertTrue(running > 0);
+    }
+
+    @Test
     void amministratoreEChiStaNelTeamDiRiserva() {
         assertTrue(admin().isAdmin(VERDI));
         assertFalse(admin().isAdmin(BIANCHI));
