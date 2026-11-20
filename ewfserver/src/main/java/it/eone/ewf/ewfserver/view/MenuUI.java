@@ -30,7 +30,7 @@ public class MenuUI extends PageBean implements Serializable {
 
     public static final String TASKS = "TASKS", AUTO_SUBSTITUTION = "AUTO_SUBSTITUTION", SUBSTITUTIONS = "SUBSTITUTIONS",
             PARTICIPATED = "PARTICIPATED", ADMIN_PROCESSES = "ADMIN_PROCESSES", FORCE_START = "FORCE_START",
-            ADMIN_SUBSTITUTIONS = "ADMIN_SUBSTITUTIONS", USERS = "USERS", TEAMS = "TEAMS", DESIGNER = "DESIGNER", PASSWORD = "PASSWORD", ERRORS = "ERRORS";
+            ADMIN_SUBSTITUTIONS = "ADMIN_SUBSTITUTIONS", USERS = "USERS", TEAMS = "TEAMS", DESIGNER = "DESIGNER", ASSIGNMENTS = "ASSIGNMENTS", PASSWORD = "PASSWORD", ERRORS = "ERRORS";
 
     public interface IListener extends Serializable {
         void reactOnMenuChoice(String choice);
@@ -66,6 +66,7 @@ public class MenuUI extends PageBean implements Serializable {
             m_cards.getItems().add(new Card(ADMIN_SUBSTITUTIONS, "Sostituzioni di tutti", "Sostituzioni in corso e programmate di ogni utente: aggiungi o togli", 0, true));
             m_cards.getItems().add(new Card(USERS, "Utenti", "Nuovi utenti, dati essenziali, team, attivazione, password provvisoria, sblocco", 0, true));
             m_cards.getItems().add(new Card(TEAMS, "Team", "Team e appartenenze con validita': chi riceve le attivita' assegnate ai team", 0, true));
+            m_cards.getItems().add(new Card(ASSIGNMENTS, "Assegnazioni e avvio", "Chi riceve i task (ruoli e regole) e quale processo parte per un documento, con i simulatori", 0, true));
             m_cards.getItems().add(new Card(DESIGNER, "Disegno processi", "Tipi processo e versioni: diagramma del flusso, validazione, bozze", 0, true));
         }
         loadSummary();

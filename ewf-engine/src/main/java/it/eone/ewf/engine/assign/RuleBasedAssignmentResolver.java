@@ -36,21 +36,55 @@ public final class RuleBasedAssignmentResolver implements AssignmentResolver {
         this.currency = currency;
     }
 
+    /** Una regola del ruolo valutata per una richiesta: excludedBecause null = compatibile. */
+    public record Evaluation(AssignmentRule rule, String excludedBecause) {
+        public boolean compatible() { return excludedBecause == null; }
+    }
+
     @Override
     public Optional<Assignment> resolve(Query q) {
-        return rules.get().stream()
-                .filter(r -> r.roleCode().equals(q.roleCode()))
-                .filter(r -> matches(r.processType(), q.processType()))
-                .filter(r -> matches(r.purchasingGroup(), q.context().get(PURCHASING_GROUP)))
-                .filter(r -> matches(r.plant(), q.context().get(PLANT)))
-                .filter(r -> matches(r.storageLocation(), q.context().get(STORAGE_LOCATION)))
-                .filter(r -> r.validFrom() == null || !q.date().isBefore(r.validFrom()))
-                .filter(r -> r.validTo() == null || !q.date().isAfter(r.validTo()))
-                .filter(r -> inRange(r, q))
-                .sorted(Comparator.comparingInt(AssignmentRule::specificity).reversed()
-                        .thenComparingLong(AssignmentRule::id))
-                .findFirst()
-                .map(r -> new Assignment(r.userId(), r.targetTeam()));
+        return evaluate(q, false).stream().filter(Evaluation::compatible).findFirst()
+                .map(e -> new Assignment(e.rule().userId(), e.rule().targetTeam()));
+    }
+
+    /**
+     * Tutte le regole del ruolo, con il motivo per cui sono escluse. Prima le compatibili, nell'ordine in cui
+     * il motore le sceglie (la prima vince), poi le escluse. E' lo stesso codice di {@link #resolve}: il
+     * simulatore del designer mostra esattamente cio' che farebbe il motore.
+     */
+    public List<Evaluation> explain(Query q) {
+        return evaluate(q, true);
+    }
+
+    /** lenient: un cambio mancante esclude la regola con il motivo (simulatore) invece di fallire (motore). */
+    private List<Evaluation> evaluate(Query q, boolean lenient) {
+        List<Evaluation> out = new java.util.ArrayList<>();
+        for (AssignmentRule r : rules.get()) {
+            if (!r.roleCode().equals(q.roleCode())) continue;
+            out.add(new Evaluation(r, why(r, q, lenient)));
+        }
+        out.sort(Comparator.comparing((Evaluation e) -> !e.compatible())
+                .thenComparing(Comparator.comparingInt((Evaluation e) -> e.rule().specificity()).reversed())
+                .thenComparingLong(e -> e.rule().id()));
+        return out;
+    }
+
+    private String why(AssignmentRule r, Query q, boolean lenient) {
+        if (!matches(r.processType(), q.processType())) return "altro tipo processo (" + r.processType() + ")";
+        if (!matches(r.purchasingGroup(), q.context().get(PURCHASING_GROUP)))
+            return "gruppo acquisti " + r.purchasingGroup();
+        if (!matches(r.plant(), q.context().get(PLANT))) return "divisione " + r.plant();
+        if (!matches(r.storageLocation(), q.context().get(STORAGE_LOCATION))) return "magazzino " + r.storageLocation();
+        if (r.validFrom() != null && q.date().isBefore(r.validFrom())) return "valida dal " + r.validFrom();
+        if (r.validTo() != null && q.date().isAfter(r.validTo())) return "scaduta il " + r.validTo();
+        try {
+            if (!inRange(r, q)) return q.value() == null ? "ha una fascia di importo e il documento non ha valore"
+                    : "importo fuori dalla fascia";
+        } catch (RuntimeException e) {
+            if (!lenient) throw e;
+            return "importo non confrontabile: " + e.getMessage();
+        }
+        return null;
     }
 
     private static boolean matches(String ruleValue, String docValue) {

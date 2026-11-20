@@ -3,6 +3,7 @@ package it.eone.ewf.ewfserver.view;
 import it.eone.ewf.ewfserver.app.EwfApp;
 import it.eone.ewf.ewfserver.context.EwfSession;
 import it.eone.ewf.service.ServiceException;
+import it.eone.ewf.service.SubstitutionService;
 import it.eone.ewf.service.Views.WorkItem;
 import it.eone.ewf.service.Views.WorklistFilter;
 import it.eone.ewf.service.auth.AuthService;
@@ -14,6 +15,7 @@ import org.eclnt.workplace.IWorkpageDispatcher;
 import org.eclnt.workplace.WorkpageDispatchedPageBean;
 
 import java.io.Serializable;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -32,6 +34,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
     private Long m_pendingTask;
 
     private boolean m_admin;
+    private String m_substituting = "";   // "sostituisce oggi: ..." (aggiornato al logon e a ogni ritorno al menu)
 
     public OutestUI(IWorkpageDispatcher dispatcher) {
         super(dispatcher);
@@ -68,6 +71,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         confirmExit(true);
         m_worklistUI = null;
         m_admin = isAdmin(s.userId());
+        refreshSubstituting();
         Long task = m_pendingTask;
         m_pendingTask = null;
         if (task != null) {
@@ -162,7 +166,42 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
 
     // ------------------------------------------------------------------ menu
 
+    private void refreshSubstituting() {
+        m_substituting = "";
+        try {
+            List<String> names = new java.util.ArrayList<>();
+            for (SubstitutionService.Substitution x : EwfApp.get().substitutions().asSubstitute(EwfSession.instance().userId()))
+                if (x.activeToday()) names.add(x.userName());
+            if (!names.isEmpty()) m_substituting = "sostituisce oggi " + String.join(", ", names);
+        } catch (RuntimeException e) {
+            // solo un'informazione: se non si legge, non si mostra
+        }
+    }
+
+    /**
+     * Chi sta operando: nome, login, amministratore, per chi fa da sostituto. Sempre visibile tranne che nel
+     * logon e nel menu (che saluta gia' l'utente). Lo stesso nome va nel titolo della scheda del browser.
+     */
+    public boolean isUserBarVisible() {
+        return EwfSession.instance().loggedIn() && !(m_contentUI instanceof MenuUI) && !(m_contentUI instanceof LogonUI);
+    }
+
+    public String getUserBar() {
+        AuthService.Session u = EwfSession.instance().user();
+        if (u == null) return "";
+        StringBuilder b = new StringBuilder("\u25cf ").append(u.displayName()).append(" (").append(u.login()).append(')');
+        if (m_admin) b.append(" \u00b7 amministratore");
+        if (!m_substituting.isEmpty()) b.append(" \u00b7 ").append(m_substituting);
+        return b.toString();
+    }
+
+    public String getWindowTitle() {
+        AuthService.Session u = EwfSession.instance().user();
+        return u == null ? "eWF" : "eWF \u2013 " + u.login();
+    }
+
     private void showMenu() {
+        refreshSubstituting();
         MenuUI ui = new MenuUI();
         ui.prepare(m_admin, errorCount(), new MenuUI.IListener() {
             @Override public void reactOnMenuChoice(String choice) { open(choice); }
@@ -205,6 +244,12 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
             case MenuUI.ADMIN_SUBSTITUTIONS -> {
                 if (!m_admin) return;
                 AdminSubstitutionsUI ui = new AdminSubstitutionsUI();
+                ui.prepare(back);
+                m_contentUI = ui;
+            }
+            case MenuUI.ASSIGNMENTS -> {
+                if (!m_admin) return;
+                AssignmentsUI ui = new AssignmentsUI();
                 ui.prepare(back);
                 m_contentUI = ui;
             }

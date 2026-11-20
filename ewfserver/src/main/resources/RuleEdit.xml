@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="re_0" beanbinding="#{d.RuleEditUI}" />
+<t:rowbodypane id="re_1" padding="14" rowdistance="8" >
+<t:row id="re_2" >
+<t:label id="re_2l" foreground="#546E7A" text="Criteri: un campo vuoto vale per qualsiasi valore. Vince la regola con piu' criteri compilati." />
+</t:row>
+<t:row id="re_3" >
+<t:combobox id="re_3a" labeltext="Tipo processo" validvaluesbinding="#{d.RuleEditUI.typesVVB}" value="#{d.RuleEditUI.type}" width="100%" withnullitem="true" />
+</t:row>
+<t:row id="re_4" coldistance="10" >
+<t:field id="re_4a" labeltext="Gruppo acquisti" text="#{d.RuleEditUI.group}" width="110" />
+<t:field id="re_4b" labeltext="Divisione" text="#{d.RuleEditUI.plant}" width="110" />
+<t:field id="re_4c" labeltext="Magazzino" text="#{d.RuleEditUI.sloc}" width="110" />
+</t:row>
+<t:row id="re_5" coldistance="10" >
+<t:field id="re_5a" labeltext="Importo da" text="#{d.RuleEditUI.from}" width="130" />
+<t:field id="re_5b" labeltext="Importo a" text="#{d.RuleEditUI.to}" width="130" />
+<t:field id="re_5c" labeltext="Divisa" text="#{d.RuleEditUI.currency}" tooltip="Vuota = EUR se c'e' una fascia" width="70" />
+</t:row>
+<t:row id="re_6" coldistance="10" >
+<t:combobox id="re_6a" labeltext="Riceve: utente" validvaluesbinding="#{d.RuleEditUI.usersVVB}" value="#{d.RuleEditUI.user}" width="280" withnullitem="true" />
+<t:combobox id="re_6b" labeltext="e/o team" validvaluesbinding="#{d.RuleEditUI.teamsVVB}" value="#{d.RuleEditUI.team}" width="240" withnullitem="true" />
+</t:row>
+<t:row id="re_7" coldistance="10" >
+<t:calendarfield id="re_7a" format="date" formatmask="dd/MM/yyyy" labeltext="Valida dal (vuoto = sempre)" timezone="LOCAL" value="#{d.RuleEditUI.validFrom}" width="130" />
+<t:calendarfield id="re_7b" format="date" formatmask="dd/MM/yyyy" labeltext="al (vuoto = senza scadenza)" timezone="LOCAL" value="#{d.RuleEditUI.validTo}" width="130" />
+</t:row>
+<t:rowdistance id="re_8" height="100%" />
+<t:row id="re_9" coldistance="8" >
+<t:coldistance id="re_9d" width="100%" />
+<t:button id="re_9n" actionListener="#{d.RuleEditUI.onCancel}" text="Annulla" width="100" />
+<t:button id="re_9s" actionListener="#{d.RuleEditUI.onSave}" text="Salva" width="100" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

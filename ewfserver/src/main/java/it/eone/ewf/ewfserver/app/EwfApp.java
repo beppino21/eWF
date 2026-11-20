@@ -8,7 +8,9 @@ import it.eone.ewf.engine.jdbc.JdbcUserDirectory;
 import it.eone.ewf.engine.memory.RateCurrencyConverter;
 import it.eone.ewf.ewfserver.config.AppConfig;
 import it.eone.ewf.service.AdminService;
+import it.eone.ewf.service.AssignmentService;
 import it.eone.ewf.service.DesignerService;
+import it.eone.ewf.service.StartRuleService;
 import it.eone.ewf.service.EwfService;
 import it.eone.ewf.service.SubstitutionService;
 import it.eone.ewf.service.auth.AuthService;
@@ -47,6 +49,8 @@ public final class EwfApp {
     private final SubstitutionService substitutions;
     private final AdminService admin;
     private final DesignerService designer;
+    private final AssignmentService assignments;
+    private final StartRuleService startRules;
     private final AuthService auth;
     private final ZoneId zone;
     private final String sapDestination;
@@ -92,8 +96,9 @@ public final class EwfApp {
         Sap sap = dest.isBlank() ? Sap.none() : Sap.connect(dest);
         sapDestination = sap.destination();
 
+        RateCurrencyConverter currency = new RateCurrencyConverter();
         engine = JdbcEngineFactory.create(ds, sap.handlers(), sap.adapters(),
-                new RateCurrencyConverter(), clock, new EngineConfig(EngineConfig.defaults().fallbackTeamCode(), zone));
+                currency, clock, new EngineConfig(EngineConfig.defaults().fallbackTeamCode(), zone));
         long maxMb = AppConfig.getInt("EWF_MAX_ATTACHMENT_MB", 20);
         service = new EwfService(engine, db, new JdbcUserDirectory(db), sap.handlers(), sap.backends(), clock, zone,
                 new EwfService.Config(maxMb * 1024 * 1024, 4000, EngineConfig.defaults().fallbackTeamCode()));
@@ -102,6 +107,8 @@ public final class EwfApp {
         // Amministratori eWF = membri del team di riserva del motore (WFADM): gli stessi che ricevono i task orfani.
         admin = new AdminService(engine, db, EngineConfig.defaults().fallbackTeamCode(), clock, zone);
         designer = new DesignerService(db, admin);
+        startRules = new StartRuleService(db, admin, engine);
+        assignments = new AssignmentService(db, admin, currency, EngineConfig.defaults().fallbackTeamCode());
         System.out.println("[EwfApp] Avviato: DB " + url + " (" + user + ")"
                 + (sapDestination == null ? " - senza SAP" : " - SAP " + sapDestination));
     }
@@ -110,6 +117,8 @@ public final class EwfApp {
     public SubstitutionService substitutions() { return substitutions; }
     public AdminService admin() { return admin; }
     public DesignerService designer() { return designer; }
+    public AssignmentService assignments() { return assignments; }
+    public StartRuleService startRules() { return startRules; }
     public WorkflowEngine engine() { return engine; }
     public DataSource dataSource() { return dataSource; }
     public AuthService auth() { return auth; }

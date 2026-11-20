@@ -2,8 +2,13 @@
 <t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
 
 <t:beanprocessing id="g_1" beanbinding="#{d.OutestUI}" >
-<t:clientconfig id="g_1cc" title="eWF" />
+<t:clientconfig id="g_1cc" title="#{d.OutestUI.windowTitle}" />
 </t:beanprocessing>
+<t:row id="g_u" background="#ECEFF1" rendered="#{d.OutestUI.userBarVisible}" >
+<t:coldistance id="g_ud" width="100%" />
+<t:label id="g_ul" font="size:11;weight:bold;color:#37474F" text="#{d.OutestUI.userBar}" />
+<t:coldistance id="g_ue" width="12" />
+</t:row>
 <t:rowpagebeaninclude id="g_3" pagebeanbinding="#{d.OutestUI.contentUI}" shownullcontent="true" />
 
 </t:layoutdefinition>

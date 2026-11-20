@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="sr_0" beanbinding="#{d.StartRulesUI}" />
+<t:rowbodypane id="sr_1" padding="14" rowdistance="8" >
+<t:row id="sr_2" coldistance="10" >
+<t:combobox id="sr_2a" actionListener="#{d.StartRulesUI.onDocTypeChanged}" flush="true" labeltext="Tipo documento" validvaluesbinding="#{d.StartRulesUI.docTypesVVB}" value="#{d.StartRulesUI.docType}" width="300" />
+<t:coldistance id="sr_2d" width="100%" />
+<t:button id="sr_2n" actionListener="#{d.StartRulesUI.onNewRule}" text="Nuova regola" width="120" />
+</t:row>
+<t:row id="sr_3" >
+<t:label id="sr_3l" foreground="#546E7A" text="Quando arriva un documento nuovo, tra le regole attive applicabili vince la priorita' piu' alta, poi quella con piu' condizioni." />
+</t:row>
+<t:row id="sr_4" rendered="#{d.StartRulesUI.withWarnings}" >
+<t:textpane id="sr_4t" foreground="#E65100" text="#{d.StartRulesUI.warnings}" width="100%" />
+</t:row>
+<t:row id="sr_5" >
+<t:fixgrid id="sr_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.StartRulesUI.rules}" sbvisibleamount="10" width="100%" >
+<t:gridcol id="sr_c1" text="N." width="45" >
+<t:label id="sr_c1l" align="right" text=".{id}" />
+</t:gridcol>
+<t:gridcol id="sr_c2" text="Attiva" width="55" >
+<t:label id="sr_c2l" align="center" background=".{activeColor}" text=".{active}" />
+</t:gridcol>
+<t:gridcol id="sr_c3" text="Priorità" width="65" >
+<t:label id="sr_c3l" align="right" text=".{priority}" />
+</t:gridcol>
+<t:gridcol id="sr_c4" text="Condizioni" width="100%" >
+<t:label id="sr_c4l" text=".{conditions}" />
+</t:gridcol>
+<t:gridcol id="sr_c5" text="Avvia" width="300" >
+<t:label id="sr_c5l" background=".{processColor}" font="weight:bold" text=".{process}" />
+</t:gridcol>
+<t:gridcol id="sr_c6" text="" width="80" >
+<t:button id="sr_c6b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="sr_c7" text="" width="80" >
+<t:button id="sr_c7b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="sr_6" >
+<t:foldablepane id="sr_sp" opened="true" rowdistance="6" text="Quale processo parte? Prova con un documento" width="100%" >
+<t:row id="sr_s1" coldistance="8" >
+<t:field id="sr_s1a" labeltext="Documento (es. numero OdA)" text="#{d.StartRulesUI.docKey}" width="160" />
+<t:button id="sr_s1b" actionListener="#{d.StartRulesUI.onReadDocument}" text="Leggi dal sistema di origine" width="210" />
+</t:row>
+<t:row id="sr_s2" >
+<t:textarea id="sr_s2a" height="110" labeltext="Attributi del documento (attributo = valore, uno per riga)" text="#{d.StartRulesUI.attributes}" width="100%" />
+</t:row>
+<t:row id="sr_s3" coldistance="8" >
+<t:button id="sr_s3b" actionListener="#{d.StartRulesUI.onSimulate}" font="weight:bold" text="Quale processo parte?" width="170" />
+<t:label id="sr_s3l" font="size:13;weight:bold" foreground="#{d.StartRulesUI.outcomeColor}" rendered="#{d.StartRulesUI.withOutcome}" text="#{d.StartRulesUI.outcome}" />
+</t:row>
+<t:row id="sr_s4" rendered="#{d.StartRulesUI.withOutcome}" >
+<t:fixgrid id="sr_sg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.StartRulesUI.sim}" sbvisibleamount="8" width="100%" >
+<t:gridcol id="sr_sc1" text="N." width="45" >
+<t:label id="sr_sc1l" align="right" text=".{id}" />
+</t:gridcol>
+<t:gridcol id="sr_sc2" text="Condizioni" width="360" >
+<t:label id="sr_sc2l" text=".{conditions}" />
+</t:gridcol>
+<t:gridcol id="sr_sc3" text="Avvia" width="150" >
+<t:label id="sr_sc3l" text=".{process}" />
+</t:gridcol>
+<t:gridcol id="sr_sc4" text="Esito" width="100%" >
+<t:label id="sr_sc4l" background=".{resultColor}" text=".{result}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:foldablepane>
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

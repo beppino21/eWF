@@ -705,6 +705,16 @@ public final class WorkflowEngine {
         return readDocument(pt, e.documentKey());
     }
 
+    /**
+     * Attributi di un documento come li vedono le regole di avvio e di assegnazione (letti dal sistema di
+     * origine). Per i simulatori del designer.
+     */
+    public Map<String, String> documentContext(String docType, String documentKey) {
+        DocumentAdapter a = adapters.find(docType).orElseThrow(() -> EngineException.of(Code.BAD_REQUEST,
+                "Nessun collegamento al sistema di origine per il tipo documento %s", docType));
+        return readOrFail(a, docType, documentKey).context();
+    }
+
     private static DocumentInfo readOrFail(DocumentAdapter a, String docType, String key) {
         DocumentInfo d;
         try {
@@ -734,11 +744,7 @@ public final class WorkflowEngine {
             info = adapters.find(e.docType()).map(a -> readOrFail(a, e.docType(), e.documentKey()));
         }
         Map<String, String> context = info.map(DocumentInfo::context).orElse(Map.of());
-        Optional<StartRule> rule = defs.startRules(e.docType()).stream()
-                .filter(r -> r.matches(context))
-                .max(Comparator.comparingInt(StartRule::priority)
-                        .thenComparingInt(r -> r.conditions().size())
-                        .thenComparing(Comparator.comparingLong(StartRule::id).reversed()));
+        Optional<StartRule> rule = StartRule.choose(defs.startRules(e.docType()), context);
         if (rule.isEmpty())
             return done(e, "Nessuna regola di avvio applicabile: il documento non richiede approvazione", null);
         ProcessType pt = startableType(rule.get().processType());

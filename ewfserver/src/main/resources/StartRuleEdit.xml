@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="sre_0" beanbinding="#{d.StartRuleEditUI}" />
+<t:rowbodypane id="sre_1" padding="14" rowdistance="8" >
+<t:row id="sre_2" >
+<t:label id="sre_2l" font="weight:bold" text="#{d.StartRuleEditUI.docTypeText}" />
+</t:row>
+<t:row id="sre_3" coldistance="10" >
+<t:combobox id="sre_3a" labeltext="Processo da avviare" validvaluesbinding="#{d.StartRuleEditUI.typesVVB}" value="#{d.StartRuleEditUI.process}" width="300" withnullitem="true" />
+<t:field id="sre_3b" labeltext="Priorità" text="#{d.StartRuleEditUI.priority}" tooltip="Vince la priorita' piu' alta; a parita' la regola con piu' condizioni" width="70" />
+<t:checkbox id="sre_3c" selected="#{d.StartRuleEditUI.active}" text="Attiva" />
+</t:row>
+<t:row id="sre_4" >
+<t:textarea id="sre_4a" height="140" labeltext="Condizioni" text="#{d.StartRuleEditUI.conditions}" width="100%" />
+</t:row>
+<t:row id="sre_5" >
+<t:textpane id="sre_5t" foreground="#546E7A" text="#{d.StartRuleEditUI.hint}" width="100%" />
+</t:row>
+<t:rowdistance id="sre_6" height="100%" />
+<t:row id="sre_7" coldistance="8" >
+<t:coldistance id="sre_7d" width="100%" />
+<t:button id="sre_7n" actionListener="#{d.StartRuleEditUI.onCancel}" text="Annulla" width="100" />
+<t:button id="sre_7s" actionListener="#{d.StartRuleEditUI.onSave}" text="Salva" width="100" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

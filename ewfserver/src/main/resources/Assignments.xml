@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="as_0" beanbinding="#{d.AssignmentsUI}" />
+<t:rowtitlebar id="as_1" text="Assegnazioni e avvio" />
+<t:rowheader id="as_h" coldistance="6" >
+<t:button id="as_back" actionListener="#{d.AssignmentsUI.onBackToMenu}" text="« Menu" width="80" />
+<t:coldistance id="as_hd0" width="20" />
+<t:button id="as_ma" actionListener="#{d.AssignmentsUI.onShowAssign}" background="#{d.AssignmentsUI.assignTabColor}" text="Regole di assegnazione" width="180" />
+<t:button id="as_ms" actionListener="#{d.AssignmentsUI.onShowStart}" background="#{d.AssignmentsUI.startTabColor}" text="Regole di avvio" width="150" />
+<t:coldistance id="as_hd" width="100%" />
+</t:rowheader>
+<t:rowbodypane id="as_body" padding="14" rendered="#{d.AssignmentsUI.assignMode}" rowdistance="8" >
+<t:row id="as_gw" rendered="#{d.AssignmentsUI.withGlobalWarning}" >
+<t:label id="as_gwl" font="weight:bold;color:#E65100" text="#{d.AssignmentsUI.globalWarning}" />
+</t:row>
+<t:row id="as_r" >
+
+<!-- ===== Ruoli ===== -->
+<t:pane id="as_l" height="100%" rowalignmenty="top" rowdistance="8" width="400" >
+<t:row id="as_l1" >
+<t:label id="as_l1l" font="weight:bold" text="Ruoli" />
+</t:row>
+<t:row id="as_l2" >
+<t:fixgrid id="as_rg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.AssignmentsUI.roles}" sbvisibleamount="14" width="100%" >
+<t:gridcol id="as_rc1" text="Codice" width="150" >
+<t:label id="as_rc1l" font="weight:bold" text=".{code}" />
+</t:gridcol>
+<t:gridcol id="as_rc2" text="Descrizione" width="100%" >
+<t:label id="as_rc2l" text=".{description}" />
+</t:gridcol>
+<t:gridcol id="as_rc3" text="Regole" width="55" >
+<t:label id="as_rc3l" align="right" background=".{rulesColor}" text=".{rules}" />
+</t:gridcol>
+<t:gridcol id="as_rc4" text="Task" width="45" >
+<t:label id="as_rc4l" align="right" text=".{used}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="as_l3" >
+<t:label id="as_l3l" font="weight:bold;color:#1565C0" text="#{d.AssignmentsUI.roleFormTitle}" />
+</t:row>
+<t:row id="as_l4" coldistance="8" >
+<t:field id="as_l4a" enabled="#{d.AssignmentsUI.codeEditable}" labeltext="Codice" text="#{d.AssignmentsUI.code}" width="150" />
+<t:field id="as_l4b" labeltext="Descrizione" text="#{d.AssignmentsUI.description}" width="100%" />
+</t:row>
+<t:row id="as_l5" coldistance="8" >
+<t:button id="as_l5n" actionListener="#{d.AssignmentsUI.onNewRole}" text="Nuovo ruolo" width="110" />
+<t:coldistance id="as_l5d" width="100%" />
+<t:button id="as_l5e" actionListener="#{d.AssignmentsUI.onDeleteRole}" enabled="#{d.AssignmentsUI.roleSelected}" text="Elimina" width="80" />
+<t:button id="as_l5s" actionListener="#{d.AssignmentsUI.onSaveRole}" text="Salva" width="80" />
+</t:row>
+</t:pane>
+<t:coldistance id="as_cd" width="16" />
+
+<!-- ===== Regole del ruolo ===== -->
+<t:pane id="as_p" height="100%" rowalignmenty="top" rowdistance="8" width="100%" >
+<t:row id="as_hint" rendered="#{d.AssignmentsUI.noRole}" >
+<t:label id="as_hintl" foreground="#777777" text="Scegliere un ruolo per vederne le regole di assegnazione." />
+</t:row>
+<t:row id="as_p1" coldistance="8" rendered="#{d.AssignmentsUI.roleSelected}" >
+<t:label id="as_p1l" font="size:14;weight:bold;color:#1F4E79" text="#{d.AssignmentsUI.roleTitle}" />
+<t:coldistance id="as_p1d" width="100%" />
+<t:button id="as_p1n" actionListener="#{d.AssignmentsUI.onNewRule}" text="Nuova regola" width="120" />
+</t:row>
+<t:row id="as_p2" rendered="#{d.AssignmentsUI.roleSelected}" >
+<t:textpane id="as_p2t" foreground="#546E7A" text="#{d.AssignmentsUI.uses}" width="100%" />
+</t:row>
+<t:row id="as_p3" rendered="#{d.AssignmentsUI.withWarnings}" >
+<t:textpane id="as_p3t" foreground="#E65100" text="#{d.AssignmentsUI.warnings}" width="100%" />
+</t:row>
+<t:row id="as_p4" rendered="#{d.AssignmentsUI.roleSelected}" >
+<t:fixgrid id="as_ug" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.AssignmentsUI.rules}" sbvisibleamount="10" width="100%" >
+<t:gridcol id="as_uc1" text="N." width="45" >
+<t:label id="as_uc1l" align="right" text=".{id}" />
+</t:gridcol>
+<t:gridcol id="as_uc2" text="Tipo processo" width="130" >
+<t:label id="as_uc2l" text=".{type}" />
+</t:gridcol>
+<t:gridcol id="as_uc3" text="Gr. acq." width="65" >
+<t:label id="as_uc3l" text=".{group}" />
+</t:gridcol>
+<t:gridcol id="as_uc4" text="Divisione" width="70" >
+<t:label id="as_uc4l" text=".{plant}" />
+</t:gridcol>
+<t:gridcol id="as_uc5" text="Magazzino" width="75" >
+<t:label id="as_uc5l" text=".{sloc}" />
+</t:gridcol>
+<t:gridcol id="as_uc6" text="Importo" width="150" >
+<t:label id="as_uc6l" text=".{amount}" />
+</t:gridcol>
+<t:gridcol id="as_uc7" text="Validità" width="150" >
+<t:label id="as_uc7l" text=".{validity}" />
+</t:gridcol>
+<t:gridcol id="as_uc8" text="Riceve" width="100%" >
+<t:label id="as_uc8l" background=".{targetColor}" font="weight:bold" text=".{target}" />
+</t:gridcol>
+<t:gridcol id="as_uc9" text="Spec." width="45" >
+<t:label id="as_uc9l" align="center" text=".{specificity}" />
+</t:gridcol>
+<t:gridcol id="as_uc10" text="" width="80" >
+<t:button id="as_uc10b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="as_uc11" text="" width="80" >
+<t:button id="as_uc11b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+
+<!-- ===== Simulatore ===== -->
+<t:row id="as_s" rendered="#{d.AssignmentsUI.roleSelected}" >
+<t:foldablepane id="as_sp" opened="true" rowdistance="6" text="Chi lo riceve? Prova con un documento" width="100%" >
+<t:row id="as_s1" coldistance="8" >
+<t:combobox id="as_s1a" labeltext="Tipo processo" validvaluesbinding="#{d.AssignmentsUI.typesVVB}" value="#{d.AssignmentsUI.simType}" width="230" withnullitem="true" />
+<t:field id="as_s1b" labeltext="Gr. acquisti" text="#{d.AssignmentsUI.simGroup}" width="80" />
+<t:field id="as_s1c" labeltext="Divisione" text="#{d.AssignmentsUI.simPlant}" width="80" />
+<t:field id="as_s1d" labeltext="Magazzino" text="#{d.AssignmentsUI.simSloc}" width="80" />
+<t:field id="as_s1e" labeltext="Importo" text="#{d.AssignmentsUI.simAmount}" width="110" />
+<t:field id="as_s1f" labeltext="Divisa" text="#{d.AssignmentsUI.simCurrency}" width="60" />
+<t:calendarfield id="as_s1g" format="date" formatmask="dd/MM/yyyy" labeltext="Data (vuoto = oggi)" timezone="LOCAL" value="#{d.AssignmentsUI.simDate}" width="120" />
+<t:button id="as_s1h" actionListener="#{d.AssignmentsUI.onSimulate}" font="weight:bold" text="Chi lo riceve?" width="120" />
+</t:row>
+<t:row id="as_s2" rendered="#{d.AssignmentsUI.withSimOutcome}" >
+<t:label id="as_s2l" font="size:13;weight:bold" foreground="#{d.AssignmentsUI.simOutcomeColor}" text="#{d.AssignmentsUI.simOutcome}" />
+</t:row>
+<t:row id="as_s3" rendered="#{d.AssignmentsUI.withSimOutcome}" >
+<t:fixgrid id="as_sg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.AssignmentsUI.sim}" sbvisibleamount="8" width="100%" >
+<t:gridcol id="as_sc1" text="N." width="45" >
+<t:label id="as_sc1l" align="right" text=".{id}" />
+</t:gridcol>
+<t:gridcol id="as_sc2" text="Criteri" width="260" >
+<t:label id="as_sc2l" text=".{criteria}" />
+</t:gridcol>
+<t:gridcol id="as_sc3" text="Riceve" width="200" >
+<t:label id="as_sc3l" text=".{target}" />
+</t:gridcol>
+<t:gridcol id="as_sc4" text="Esito" width="100%" >
+<t:label id="as_sc4l" background=".{resultColor}" text=".{result}" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+</t:foldablepane>
+</t:row>
+</t:pane>
+</t:row>
+</t:rowbodypane>
+<t:rowpagebeaninclude id="as_start" pagebeanbinding="#{d.AssignmentsUI.startRules}" rendered="#{d.AssignmentsUI.startMode}" />
+
+</t:layoutdefinition>

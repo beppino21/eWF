@@ -491,6 +491,107 @@ public class EwfServicePostgresTest {
     }
 
     @Test
+    void regoleDiAssegnazioneESimulatore() {
+        AssignmentService a = new AssignmentService(db, admin(), (m, cur, d) -> {
+            if (m.currency().equals(cur)) return m;
+            throw new IllegalStateException("Cambio mancante " + m.currency() + "->" + cur);
+        }, "WFADM");
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> a.roles(ROSSI)).code());
+        AssignmentService.RoleRow r = a.roles(VERDI).stream().filter(x -> x.code().equals("APPROVATORE")).findFirst().orElseThrow();
+        assertEquals(1, r.rules());
+        assertTrue(r.usedInTasks() >= 1);
+        assertFalse(a.roleUses(VERDI, "APPROVATORE").isEmpty());
+
+        // la divisione 1000 ha il suo approvatore: regola piu' specifica
+        long plantRule = a.saveRule(VERDI, new AssignmentService.RuleEdit(null, "approvatore", null, null, "1000", null,
+                null, null, null, NERI, null, null, null));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> a.saveRule(VERDI, new AssignmentService.RuleEdit(null,
+                "APPROVATORE", null, null, null, null, null, null, null, null, null, null, null))).code(), "senza destinatario");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> a.saveRule(VERDI, new AssignmentService.RuleEdit(null,
+                "APPROVATORE", null, null, null, null, new java.math.BigDecimal("10"), new java.math.BigDecimal("5"), null,
+                ROSSI, null, null, null))).code(), "fascia rovesciata");
+
+        AssignmentService.SimResult s1 = a.simulate(VERDI, new AssignmentService.SimRequest(ODA, "APPROVATORE", null, "1000",
+                null, new java.math.BigDecimal("500"), "EUR", null));
+        assertTrue(s1.assigned());
+        assertEquals(plantRule, s1.lines().get(0).rule().id());
+        assertTrue(s1.lines().get(0).winner());
+        assertTrue(s1.outcome().contains("regola " + plantRule), s1.outcome());
+        assertNull(s1.lines().get(1).excludedBecause(), "anche la generica e' compatibile, ma perde");
+
+        AssignmentService.SimResult s2 = a.simulate(VERDI, new AssignmentService.SimRequest(ODA, "APPROVATORE", null, "2000",
+                null, null, null, null));
+        assertEquals(1L, s2.lines().stream().filter(AssignmentService.SimLine::winner).findFirst().orElseThrow().rule().id());
+        assertEquals("divisione 1000", s2.lines().stream().filter(l -> l.rule().id() == plantRule).findFirst().orElseThrow()
+                .excludedBecause());
+
+        // una fascia di importo con la stessa specificita' della divisione: avviso di sovrapposizione
+        long bandRule = a.saveRule(VERDI, new AssignmentService.RuleEdit(null, "APPROVATORE", null, "001", null, null,
+                null, new java.math.BigDecimal("1000"), null, ROSSI, null, null, null));
+        assertTrue(a.warnings(VERDI, "APPROVATORE").stream().anyMatch(w -> w.contains(plantRule + " e " + bandRule)),
+                a.warnings(VERDI, "APPROVATORE").toString());
+        AssignmentService.SimResult s3 = a.simulate(VERDI, new AssignmentService.SimRequest(ODA, "APPROVATORE", "001", "2000",
+                null, new java.math.BigDecimal("10"), "USD", null));
+        assertTrue(s3.lines().stream().anyMatch(l -> l.rule().id() == bandRule && l.excludedBecause().contains("non confrontabile")),
+                s3.lines().toString());
+
+        // nessuna regola compatibile -> team di riserva
+        a.saveRole(VERDI, "controller", "Controllo di gestione", true);
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> a.saveRole(VERDI, "CONTROLLER", "x", true)).code());
+        AssignmentService.SimResult s4 = a.simulate(VERDI, new AssignmentService.SimRequest(ODA, "CONTROLLER", null, null, null,
+                null, null, null));
+        assertFalse(s4.assigned());
+        assertTrue(s4.outcome().contains("WFADM"));
+
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> a.deleteRole(VERDI, "APPROVATORE")).code());
+        a.deleteRole(VERDI, "CONTROLLER");
+        a.deleteRule(VERDI, bandRule);
+        assertEquals(2, a.rules(VERDI, "APPROVATORE").size());
+        assertTrue(a.rolesWithoutRules(VERDI).isEmpty());
+    }
+
+    @Test
+    void regoleDiAvvioESimulatore() {
+        StartRuleService r = new StartRuleService(db, admin(), engine);
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> r.rules(ROSSI, "F")).code());
+        assertTrue(r.docTypes(VERDI).stream().anyMatch(c -> c.code().equals("F")));
+        assertTrue(r.warnings(VERDI, "F").stream().anyMatch(w -> w.contains("Nessuna regola attiva")));
+
+        long generic = r.saveRule(VERDI, new StartRuleService.RuleEdit(null, "F", Map.of(), 0, ODA, true));
+        long plant = r.saveRule(VERDI, new StartRuleService.RuleEdit(null, "F", Map.of("plant", "1000", "sap.BSART", "*"), 0, ODA, true));
+        long off = r.saveRule(VERDI, new StartRuleService.RuleEdit(null, "F", Map.of("plant", "1000"), 9, ODA, false));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> r.saveRule(VERDI,
+                new StartRuleService.RuleEdit(null, "F", Map.of("plant", " "), 0, ODA, true))).code(), "valore vuoto");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> r.saveRule(VERDI,
+                new StartRuleService.RuleEdit(null, "B", Map.of(), 0, ODA, true))).code(), "processo di un altro tipo documento");
+
+        // piu' condizioni a parita' di priorita' -> vince la regola della divisione; quella disattivata non conta
+        assertEquals(List.of(plant, generic, off), r.rules(VERDI, "F").stream().map(StartRuleService.RuleRow::id).toList());
+        StartRuleService.SimResult s = r.simulate(VERDI, "F", Map.of("plant", "1000", "sap.BSART", "NB"));
+        assertTrue(s.starts());
+        assertEquals(plant, s.lines().get(0).rule().id());
+        assertTrue(s.lines().get(0).winner());
+        assertEquals("non attiva", s.lines().stream().filter(l -> l.rule().id() == off).findFirst().orElseThrow().excludedBecause());
+
+        StartRuleService.SimResult s2 = r.simulate(VERDI, "F", Map.of("plant", "2000"));
+        assertEquals(generic, s2.lines().get(0).rule().id());
+        assertTrue(s2.lines().stream().filter(l -> l.rule().id() == plant).findFirst().orElseThrow().excludedBecause()
+                .contains("plant = 1000 (documento: 2000)"));
+
+        // stesse condizioni e priorita' -> avviso; documento vero letto dall'adapter
+        long twin = r.saveRule(VERDI, new StartRuleService.RuleEdit(null, "F", Map.of(), 0, ODA, true));
+        assertTrue(r.warnings(VERDI, "F").stream().anyMatch(w -> w.contains(generic + " e " + twin)), r.warnings(VERDI, "F").toString());
+        assertEquals("1000", r.documentContext(VERDI, "F", "4500000001").get("plant"));
+        assertEquals(List.of("plant", "sap.BSART"), r.knownKeys(VERDI, "F"));
+        r.deleteRule(VERDI, twin);
+        r.deleteRule(VERDI, off);
+
+        // quello che il simulatore dice e' quello che fa il motore
+        assertEquals(plant, StartRule.choose(new JdbcDefinitionStore(db).startRules("F"), Map.of("plant", "1000")).orElseThrow().id());
+        assertEquals("{\"a\":\"x\\\"y\"}", StartRuleService.json(Map.of("a", "x\"y")));
+    }
+
+    @Test
     void designerConsultaTipiVersioniEValidazione() {
         DesignerService d = new DesignerService(db, admin());
         assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> d.types(ROSSI)).code());

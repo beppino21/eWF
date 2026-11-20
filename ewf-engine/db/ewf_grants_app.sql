@@ -52,6 +52,11 @@ GRANT UPDATE (description) ON ewf_org.team TO ewf_app;
 GRANT INSERT, DELETE ON ewf_org.team_member TO ewf_app;
 GRANT UPDATE (valid_from, valid_to) ON ewf_org.team_member TO ewf_app;
 
+-- Ruoli e regole di assegnazione, gestiti dagli amministratori (il codice del ruolo non cambia)
+GRANT INSERT, DELETE ON ewf_org.role TO ewf_app;
+GRANT UPDATE (description) ON ewf_org.role TO ewf_app;
+GRANT INSERT, UPDATE, DELETE ON ewf_org.assignment_rule TO ewf_app;
+
 -- Sostituzioni indicate dagli utenti stessi
 GRANT INSERT, DELETE ON ewf_org.substitution TO ewf_app;
 GRANT UPDATE (valid_to, changed_by, changed_at) ON ewf_org.substitution TO ewf_app;
