@@ -74,6 +74,45 @@
 <t:row id="ds_p2" rendered="#{d.DesignerUI.versionSelected}" >
 <t:label id="ds_p2l" foreground="#546E7A" text="#{d.DesignerUI.versionInfo}" />
 </t:row>
+<t:row id="ds_t" coldistance="8" rendered="#{d.DesignerUI.versionSelected}" >
+<t:button id="ds_tn" actionListener="#{d.DesignerUI.onNewVersion}" text="Nuova versione da questa" width="190" />
+<t:button id="ds_tp" actionListener="#{d.DesignerUI.onVersionSettings}" rendered="#{d.DesignerUI.draft}" text="Azione finale e nota" width="160" />
+<t:button id="ds_ts" actionListener="#{d.DesignerUI.onNewStep}" rendered="#{d.DesignerUI.draft}" text="Nuovo step" width="110" />
+<t:coldistance id="ds_td0" width="100%" />
+<t:button id="ds_td" actionListener="#{d.DesignerUI.onDeleteDraft}" rendered="#{d.DesignerUI.draft}" text="Elimina bozza" width="120" />
+<t:button id="ds_ta" actionListener="#{d.DesignerUI.onActivate}" font="weight:bold" rendered="#{d.DesignerUI.draft}" text="Attiva" width="100" />
+</t:row>
+<t:row id="ds_ro" rendered="#{d.DesignerUI.readOnlyVersion}" >
+<t:label id="ds_rol" foreground="#777777" text="Versione in sola consultazione: per cambiarla si crea una nuova versione (bozza) a partire da questa." />
+</t:row>
+<t:row id="ds_st" rendered="#{d.DesignerUI.draft}" >
+<t:fixgrid id="ds_sg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.DesignerUI.steps}" sbvisibleamount="8" width="100%" >
+<t:gridcol id="ds_sc1" text="Step" width="50" >
+<t:label id="ds_sc1l" align="right" font="weight:bold" text=".{stepNo}" />
+</t:gridcol>
+<t:gridcol id="ds_sc2" text="Ramo" width="60" >
+<t:label id="ds_sc2l" text=".{option}" />
+</t:gridcol>
+<t:gridcol id="ds_sc3" text="Task" width="100%" >
+<t:label id="ds_sc3l" text=".{tasks}" />
+</t:gridcol>
+<t:gridcol id="ds_sc4" text="Approvato →" width="95" >
+<t:label id="ds_sc4l" text=".{nextOk}" />
+</t:gridcol>
+<t:gridcol id="ds_sc5" text="Respinto →" width="95" >
+<t:label id="ds_sc5l" text=".{nextKo}" />
+</t:gridcol>
+<t:gridcol id="ds_sc6" text="Soglia" width="110" >
+<t:label id="ds_sc6l" align="right" text=".{threshold}" />
+</t:gridcol>
+<t:gridcol id="ds_sc7" text="" width="80" >
+<t:button id="ds_sc7b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="ds_sc8" text="" width="80" >
+<t:button id="ds_sc8b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
 <t:row id="ds_p3" rendered="#{d.DesignerUI.noProblems}" >
 <t:label id="ds_p3l" font="weight:bold;color:#2E7D32" text="Validazione: nessun problema" />
 </t:row>

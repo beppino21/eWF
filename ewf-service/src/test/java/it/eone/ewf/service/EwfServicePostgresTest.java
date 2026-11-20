@@ -349,6 +349,148 @@ public class EwfServicePostgresTest {
     AdminService admin() { return new AdminService(engine, db, "WFADM", clock, ROME); }
 
     @Test
+    void designerNuovaVersioneModificaEAttivazione() {
+        DesignerService d = new DesignerService(db, admin());
+        long running = atApproval("4500000088");                       // gira sulla versione 1
+        long v1 = d.versions(VERDI, ODA).get(0).id();
+
+        // copia completa, comprese le funzioni speciali che il modello del motore non conosce
+        long v2 = d.newVersion(VERDI, v1);
+        assertEquals("DRAFT", d.versions(VERDI, ODA).get(0).status());
+        assertEquals(2, d.versions(VERDI, ODA).get(0).versionNo());
+        assertEquals("2", value("SELECT count(*) FROM ewf_core.task_function f JOIN ewf_core.task_def t ON t.id = f.task_def_id"
+                + " JOIN ewf_core.step_def s ON s.id = t.step_id WHERE s.version_id = " + v2));
+        assertFalse(d.view(VERDI, v2).hasErrors());
+
+        List<DesignerService.StepRow> steps = d.steps(VERDI, v2);
+        assertEquals(List.of(10, 20, 30), steps.stream().map(DesignerService.StepRow::stepNo).toList());
+        DesignerService.StepRow s30 = steps.get(2);
+
+        // 30 diventa 40: la freccia "approvato" dello step 20 segue
+        d.saveStep(VERDI, v2, new DesignerService.StepEdit(s30.id(), 40, null, false, "ALL", null, 10, null, null));
+        assertEquals(Integer.valueOf(40), d.steps(VERDI, v2).get(1).nextOk());
+
+        // nuovo step 30 tra 20 e 40, con una soglia
+        long n30 = d.saveStep(VERDI, v2, new DesignerService.StepEdit(null, 30, null, false, "ALL", 40, 10,
+                new java.math.BigDecimal("5000"), null));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveStep(VERDI, v2,
+                new DesignerService.StepEdit(null, 30, null, false, "ALL", 40, 10, null, null))).code(), "numero doppio");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveTask(VERDI, v2,
+                new DesignerService.TaskEdit(null, n30, "Controllo", "RULES", null, null, false, null, 0, null, null, null, null))).code(),
+                "con le regole serve un ruolo");
+        long t = d.saveTask(VERDI, v2, new DesignerService.TaskEdit(null, n30, "Controllo di gestione", "RULES", "APPROVATORE",
+                null, false, null, 50, "NAME", "WEB", "IMMEDIATE", null));
+        d.saveStep(VERDI, v2, new DesignerService.StepEdit(steps.get(1).id(), 20, null, false, "ALL", 30, 10, null, null));
+        DesignerService.VersionView vv = d.view(VERDI, v2);
+        assertFalse(vv.hasErrors(), vv.problems().toString());
+        assertEquals(List.of(10, 20, 30, 40), vv.definition().steps().stream().map(StepDef::stepNo).distinct().toList());
+        assertEquals("EUR", d.steps(VERDI, v2).get(2).currency());
+        assertEquals("IMMEDIATE", d.steps(VERDI, v2).get(2).tasks().get(0).notifyMode());
+
+        // uno step che manda verso il nulla impedisce l'attivazione
+        d.saveStep(VERDI, v2, new DesignerService.StepEdit(n30, 30, null, false, "ALL", 77, 10, new java.math.BigDecimal("5000"), "EUR"));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.activate(VERDI, v2)).code());
+        d.saveStep(VERDI, v2, new DesignerService.StepEdit(n30, 30, null, false, "ALL", 40, 10, new java.math.BigDecimal("5000"), "EUR"));
+
+        d.saveVersion(VERDI, v2, new DesignerService.VersionEdit(null, "", "Aggiunto controllo di gestione"));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveVersion(VERDI, v2,
+                new DesignerService.VersionEdit(null, "non json", null))).code());
+        d.activate(VERDI, v2);
+        assertEquals("ACTIVE", value("SELECT status FROM ewf_core.process_version WHERE id = " + v2));
+        assertEquals("RETIRED", value("SELECT status FROM ewf_core.process_version WHERE id = " + v1));
+        assertEquals(String.valueOf(v1), value("SELECT version_id FROM ewf_core.process_instance WHERE id = " + running),
+                "il processo in corso resta sulla sua versione");
+
+        // le versioni non in bozza non si toccano
+        assertEquals(Code.INVALID_STATE, assertThrows(ServiceException.class, () -> d.deleteTask(VERDI, v2, t)).code());
+        assertEquals(Code.INVALID_STATE, assertThrows(ServiceException.class, () -> d.deleteDraft(VERDI, v1)).code());
+
+        // ...nemmeno scrivendo direttamente come ewf_app (trigger)
+        boolean canSetRole = "t".equals(value("SELECT pg_has_role(current_user, 'ewf_app', 'MEMBER')"));
+        if (canSetRole) {
+            Exception ex = assertThrows(Exception.class, () -> sql("SET LOCAL ROLE ewf_app; UPDATE ewf_core.step_def SET next_step_ko = 20"
+                    + " WHERE version_id = " + v2));
+            assertTrue(String.valueOf(ex.getCause() == null ? ex.getMessage() : ex.getCause().getMessage()).contains("non in bozza"),
+                    String.valueOf(ex));
+            sql("RESET ROLE");
+        }
+
+        // bozza nuova, poi eliminata
+        long v3 = d.newVersion(VERDI, v2);
+        d.deleteTask(VERDI, v3, d.steps(VERDI, v3).get(2).tasks().get(0).id());
+        d.deleteStep(VERDI, v3, d.steps(VERDI, v3).get(2).id());
+        assertEquals(3, d.steps(VERDI, v3).size());
+        d.deleteDraft(VERDI, v3);
+        assertNull(value("SELECT id FROM ewf_core.process_version WHERE id = " + v3));
+        assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> d.newVersion(ROSSI, v2)).code());
+    }
+
+    @Test
+    void designerAgganciOpzioniEFunzioni() {
+        DesignerService d = new DesignerService(db, admin());
+        long v2 = d.newVersion(VERDI, d.versions(VERDI, ODA).get(0).id());
+        List<DesignerService.StepRow> steps = d.steps(VERDI, v2);
+        long approval = steps.get(1).tasks().get(0).id();               // "Approvazione responsabile", step 20
+        assertEquals(2, d.extras(VERDI, v2, approval).functions().size(), "funzioni copiate");
+
+        // agganci
+        d.saveHook(VERDI, v2, approval, null, null, "ON_OK", "/T/FN_OK", null, "{\"release_code\":\"01\"}");
+        d.saveHook(VERDI, v2, approval, null, null, "ON_OK", "/T/FN_KO", null, "");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class,
+                () -> d.saveHook(VERDI, v2, approval, null, null, "BUTTON", "/T/FN_OK", null, null)).code(), "pulsante senza etichetta");
+        List<DesignerService.HookRow> hooks = d.extras(VERDI, v2, approval).hooks();
+        assertEquals(List.of(1, 2), hooks.stream().map(DesignerService.HookRow::seq).toList());
+        assertTrue(hooks.get(0).config().contains("release_code"));
+        d.saveHook(VERDI, v2, approval, "ON_OK", 2, "BEFORE_ACTION", "/T/FN_KO", null, "");
+        assertEquals(List.of("BEFORE_ACTION", "ON_OK"), d.extras(VERDI, v2, approval).hooks().stream()
+                .map(DesignerService.HookRow::event).toList(), "spostato su un altro evento");
+        d.deleteHook(VERDI, v2, approval, "BEFORE_ACTION", 1);
+        assertEquals(1, d.extras(VERDI, v2, approval).hooks().size());
+
+        // nodo di scelta con due rami: lo step 30 diventa la variante A, si aggiunge la variante B
+        d.saveOption(VERDI, v2, approval, null, new DesignerService.OptionRow("a", 0, "Strada normale", false, null, "", null, null));
+        d.saveOption(VERDI, v2, approval, null, new DesignerService.OptionRow("B", 0, "Urgente", false, null, "", null, null));
+        d.saveOption(VERDI, v2, approval, null, new DesignerService.OptionRow("NO", 0, "Respingi", true, null, "", null, null));
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveOption(VERDI, v2, approval, null,
+                new DesignerService.OptionRow("A", 0, "Doppio", false, null, "", null, null))).code(), "codice doppio");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveOption(VERDI, v2, approval, null,
+                new DesignerService.OptionRow("X", 0, "Passa", false, null, "", ODA, null))).code(), "tipo senza modo");
+        DesignerService.StepRow s30 = d.steps(VERDI, v2).get(2);
+        d.saveStep(VERDI, v2, new DesignerService.StepEdit(s30.id(), 30, "A", false, "ALL", null, 10, null, null));
+        long b30 = d.saveStep(VERDI, v2, new DesignerService.StepEdit(null, 30, "B", false, "ALL", null, 20, null, null));
+        d.saveTask(VERDI, v2, new DesignerService.TaskEdit(null, b30, "Verifica urgente", "STARTER", null, null, false, null, 0,
+                null, null, null, null));
+        DesignerService.VersionView vv = d.view(VERDI, v2);
+        assertFalse(vv.hasErrors(), vv.problems().toString());
+        assertEquals(List.of("A", "B", "NO"), vv.definition().steps().get(1).tasks().get(0).options().stream()
+                .map(it.eone.ewf.engine.model.OptionDef::code).toList());
+
+        // rinominare l'opzione porta con se' il ramo; eliminarla con step nel ramo non si puo'
+        d.saveOption(VERDI, v2, approval, "B", new DesignerService.OptionRow("URG", 0, "Urgente", false, null, "", null, null));
+        assertTrue(d.steps(VERDI, v2).stream().anyMatch(x -> "URG".equals(x.option())));
+        assertEquals(2, d.extras(VERDI, v2, approval).options().get(1).seq(), "resta al suo posto");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.deleteOption(VERDI, v2, approval, "URG")).code());
+        d.deleteOption(VERDI, v2, approval, "NO");
+        assertFalse(d.view(VERDI, v2).hasErrors());
+
+        // funzioni speciali
+        DesignerService.FunctionRow f0 = d.extras(VERDI, v2, approval).functions().get(0);
+        d.saveFunction(VERDI, v2, approval, new DesignerService.FunctionRow(f0.id(), f0.code(), "Sollecito al fornitore",
+                f0.handlerCode(), null, f0.position()));
+        d.saveFunction(VERDI, v2, approval, new DesignerService.FunctionRow(0, "stampa", "Ristampa", "/T/FN_OK", "Ristampare?", 0));
+        List<DesignerService.FunctionRow> fs = d.extras(VERDI, v2, approval).functions();
+        assertEquals(List.of("Sollecito al fornitore", "Funzione che fallisce", "Ristampa"),
+                fs.stream().map(DesignerService.FunctionRow::label).toList());
+        assertEquals("STAMPA", fs.get(2).code());
+        d.deleteFunction(VERDI, v2, approval, fs.get(1).id());
+        assertEquals(2, d.extras(VERDI, v2, approval).functions().size());
+
+        d.activate(VERDI, v2);
+        assertEquals(Code.INVALID_STATE, assertThrows(ServiceException.class,
+                () -> d.deleteFunction(VERDI, v2, approval, fs.get(0).id())).code());
+    }
+
+    @Test
     void designerConsultaTipiVersioniEValidazione() {
         DesignerService d = new DesignerService(db, admin());
         assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> d.types(ROSSI)).code());

@@ -5,13 +5,16 @@ import it.eone.ewf.ewfserver.context.EwfSession;
 import it.eone.ewf.ewfserver.context.SessionGuard;
 import it.eone.ewf.service.DesignerService;
 import it.eone.ewf.service.DesignerService.Problem;
+import it.eone.ewf.service.DesignerService.StepRow;
 import it.eone.ewf.service.DesignerService.TypeRow;
 import it.eone.ewf.service.DesignerService.VersionRow;
 import it.eone.ewf.service.DesignerService.VersionView;
 import it.eone.ewf.service.ServiceException;
 import org.eclnt.editor.annotations.CCGenClass;
 import org.eclnt.jsfserver.base.faces.event.ActionEvent;
+import org.eclnt.jsfserver.defaultscreens.ModalPopup;
 import org.eclnt.jsfserver.defaultscreens.Statusbar;
+import org.eclnt.jsfserver.defaultscreens.YESNOPopup;
 import org.eclnt.jsfserver.elements.impl.FIXGRIDItem;
 import org.eclnt.jsfserver.elements.impl.FIXGRIDListBinding;
 import org.eclnt.jsfserver.pagebean.PageBean;
@@ -37,6 +40,7 @@ public class DesignerUI extends PageBean implements Serializable {
     private final FIXGRIDListBinding<TypeItem> m_types = new FIXGRIDListBinding<>();
     private final FIXGRIDListBinding<VersionItem> m_versions = new FIXGRIDListBinding<>();
     private final FIXGRIDListBinding<ProblemItem> m_problems = new FIXGRIDListBinding<>();
+    private final FIXGRIDListBinding<StepItem> m_steps = new FIXGRIDListBinding<>();
 
     private String m_type;
     private String m_typeDescription;
@@ -103,9 +107,11 @@ public class DesignerUI extends PageBean implements Serializable {
     private void openVersion(long id) {
         m_versionId = id;
         m_problems.getItems().clear();
+        m_steps.getItems().clear();
         m_svg = null;
         try {
             m_view = designer().view(uid(), id);
+            if (isDraft()) for (StepRow r : designer().steps(uid(), id)) m_steps.getItems().add(new StepItem(r));
             for (Problem p : m_view.problems()) m_problems.getItems().add(new ProblemItem(p));
             if (m_view.definition() != null) {
                 Set<Integer> bad = new TreeSet<>();
@@ -128,6 +134,12 @@ public class DesignerUI extends PageBean implements Serializable {
         m_view = null;
         m_svg = null;
         m_problems.getItems().clear();
+        m_steps.getItems().clear();
+    }
+
+    /** Dopo una modifica: righe dei tipi e delle versioni aggiornate, la stessa versione riaperta. */
+    private void refreshAfterChange() {
+        reloadTypes();
     }
 
     // ------------------------------------------------------------------ azioni
@@ -136,11 +148,110 @@ public class DesignerUI extends PageBean implements Serializable {
 
     public void onRefresh(ActionEvent ae) { reloadTypes(); }
 
+    public void onNewVersion(ActionEvent ae) {
+        if (m_view == null) return;
+        VersionRow from = m_view.row();
+        YESNOPopup.createInstance("Nuova versione", "Creare una nuova bozza di " + from.processType()
+                + " copiando la versione " + from.versionNo() + "?", new YESNOPopup.IYesNoListener() {
+            @Override public void reactOnYes() {
+                try {
+                    m_versionId = designer().newVersion(uid(), from.id());
+                    Statusbar.outputSuccess("Bozza creata");
+                    refreshAfterChange();
+                } catch (ServiceException e) {
+                    Statusbar.outputError(e.getMessage());
+                }
+            }
+            @Override public void reactOnNo() { }
+        });
+    }
+
+    public void onDeleteDraft(ActionEvent ae) {
+        if (!isDraft()) return;
+        VersionRow v = m_view.row();
+        YESNOPopup.createInstance("Elimina bozza", "Eliminare la bozza " + v.versionNo() + " di " + v.processType()
+                + " con tutto il suo contenuto?", new YESNOPopup.IYesNoListener() {
+            @Override public void reactOnYes() {
+                try {
+                    designer().deleteDraft(uid(), v.id());
+                    m_versionId = null;
+                    Statusbar.outputSuccess("Bozza eliminata");
+                    refreshAfterChange();
+                } catch (ServiceException e) {
+                    Statusbar.outputError(e.getMessage());
+                }
+            }
+            @Override public void reactOnNo() { }
+        });
+    }
+
+    public void onActivate(ActionEvent ae) {
+        if (!isDraft()) return;
+        if (m_view.hasErrors()) {
+            Statusbar.outputError("La validazione ha trovato errori: correggerli prima di attivare");
+            return;
+        }
+        VersionRow v = m_view.row();
+        YESNOPopup.createInstance("Attiva versione", "Attivare la versione " + v.versionNo() + " di " + v.processType()
+                + "? I nuovi processi useranno questa; quelli gia' in corso restano sulla loro versione.",
+                new YESNOPopup.IYesNoListener() {
+                    @Override public void reactOnYes() {
+                        try {
+                            designer().activate(uid(), v.id());
+                            Statusbar.outputSuccess("Versione " + v.versionNo() + " attiva");
+                            refreshAfterChange();
+                        } catch (ServiceException e) {
+                            Statusbar.outputError(e.getMessage());
+                        }
+                    }
+                    @Override public void reactOnNo() { }
+                });
+    }
+
+    public void onVersionSettings(ActionEvent ae) {
+        if (!isDraft()) return;
+        VersionEditUI ui = new VersionEditUI();
+        ui.prepare(m_versionId, new TaskEditUI.IListener() {
+            @Override public void saved() {
+                closePopup(ui);
+                openVersion(m_versionId);
+            }
+            @Override public void cancelled() { closePopup(ui); }
+        });
+        openModalPopup(ui, "Azione finale e nota", 560, 320, new ModalPopup.IModalPopupListener() {
+            @Override public void reactOnPopupClosedByUser() { closePopup(ui); }
+        });
+    }
+
+    public void onNewStep(ActionEvent ae) { openStep(null); }
+
+    private void openStep(StepRow r) {
+        if (!isDraft()) return;
+        StepEditUI ui = new StepEditUI();
+        ui.prepare(m_versionId, r == null ? null : r.id(), new StepEditUI.IListener() {
+            @Override public void changed() { openVersion(m_versionId); }
+            @Override public void close() {
+                closePopup(ui);
+                refreshAfterChange();
+            }
+        });
+        openModalPopup(ui, r == null ? "Nuovo step" : "Step " + r.stepNo() + (r.option() == null ? "" : " (ramo " + r.option() + ")"),
+                760, 600, new ModalPopup.IModalPopupListener() {
+                    @Override public void reactOnPopupClosedByUser() {
+                        closePopup(ui);
+                        refreshAfterChange();
+                    }
+                });
+    }
+
     // ------------------------------------------------------------------ binding
 
     public FIXGRIDListBinding<TypeItem> getTypes() { return m_types; }
     public FIXGRIDListBinding<VersionItem> getVersions() { return m_versions; }
     public FIXGRIDListBinding<ProblemItem> getProblems() { return m_problems; }
+    public FIXGRIDListBinding<StepItem> getSteps() { return m_steps; }
+    public boolean isDraft() { return m_view != null && "DRAFT".equals(m_view.row().status()); }
+    public boolean isReadOnlyVersion() { return m_view != null && !isDraft(); }
     public boolean isTypeSelected() { return m_type != null; }
     public String getVersionsTitle() { return "Versioni di " + m_type; }
     public boolean isVersionSelected() { return m_view != null; }
@@ -225,6 +336,40 @@ public class DesignerUI extends PageBean implements Serializable {
         public String getActivated() { return day(v.activatedAt()); }
         public String getSteps() { return String.valueOf(v.steps()); }
         public String getRunning() { return v.running() == 0 ? "" : String.valueOf(v.running()); }
+    }
+
+    public class StepItem extends FIXGRIDItem implements Serializable {
+        private static final long serialVersionUID = 1L;
+        private final StepRow r;
+        StepItem(StepRow r) { this.r = r; }
+        public String getStepNo() { return r.stepNo() + (r.first() ? " \u25b6" : ""); }
+        public String getOption() { return r.option() == null ? "" : r.option(); }
+        public String getTasks() {
+            if (r.tasks().isEmpty()) return "(nessun task)";
+            String t = r.tasks().get(0).text();
+            return r.tasks().size() == 1 ? t : t + "  + altri " + (r.tasks().size() - 1) + " in parallelo";
+        }
+        public String getNextOk() { return r.nextOk() == null ? "fine" : "step " + r.nextOk(); }
+        public String getNextKo() { return r.nextKo() == null ? "fine" : "step " + r.nextKo(); }
+        public String getThreshold() {
+            return r.minAmount() == null ? "" : "\u2265 " + FlowSvg.money(new it.eone.ewf.engine.model.Money(r.minAmount(),
+                    r.currency() == null ? "EUR" : r.currency()));
+        }
+        public void onEdit(ActionEvent ae) { openStep(r); }
+        public void onDelete(ActionEvent ae) {
+            YESNOPopup.createInstance("Elimina step", "Eliminare lo step " + r.stepNo() + " con i suoi task?"
+                    + " Le frecce che vi puntano andranno sistemate (le segnala la validazione).", new YESNOPopup.IYesNoListener() {
+                @Override public void reactOnYes() {
+                    try {
+                        designer().deleteStep(uid(), m_versionId, r.id());
+                        refreshAfterChange();
+                    } catch (ServiceException e) {
+                        Statusbar.outputError(e.getMessage());
+                    }
+                }
+                @Override public void reactOnNo() { }
+            });
+        }
     }
 
     public class ProblemItem extends FIXGRIDItem implements Serializable {

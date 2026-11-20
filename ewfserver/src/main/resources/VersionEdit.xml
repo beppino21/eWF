@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="ve_0" beanbinding="#{d.VersionEditUI}" />
+<t:rowbodypane id="ve_1" padding="14" rowdistance="8" >
+<t:row id="ve_2" >
+<t:combobox id="ve_2a" labeltext="Azione di fine processo" validvaluesbinding="#{d.VersionEditUI.handlersVVB}" value="#{d.VersionEditUI.handler}" width="100%" withnullitem="true" />
+</t:row>
+<t:row id="ve_3" >
+<t:field id="ve_3a" labeltext="Parametri (JSON)" text="#{d.VersionEditUI.config}" tooltip="Esempio per il rilascio dell'OdA: {&quot;Z_WF_SET_RIL&quot;:&quot;01&quot;}" width="100%" />
+</t:row>
+<t:row id="ve_4" >
+<t:textarea id="ve_4a" height="70" labeltext="Nota della versione" text="#{d.VersionEditUI.note}" width="100%" />
+</t:row>
+<t:rowdistance id="ve_5" height="100%" />
+<t:row id="ve_6" coldistance="8" >
+<t:coldistance id="ve_6d" width="100%" />
+<t:button id="ve_6n" actionListener="#{d.VersionEditUI.onCancel}" text="Annulla" width="100" />
+<t:button id="ve_6s" actionListener="#{d.VersionEditUI.onSave}" text="Salva" width="100" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

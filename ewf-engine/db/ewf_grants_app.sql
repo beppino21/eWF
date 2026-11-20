@@ -1,11 +1,12 @@
--- eWF: permessi dell'utente applicativo ewf_app (schema 0.14).
+-- eWF: permessi dell'utente applicativo ewf_app (schema 0.16).
 --
 -- Script UNICO e COMPLETO: si esegue come ewf_owner (proprietario delle tabelle) in ogni ambiente,
 -- dopo l'installazione o dopo una migrazione. Si puo' rieseguire quante volte si vuole.
 -- Lo schema eone_connect ha i suoi permessi: li assegna ConnectSchemaTool (terzo argomento ewf_app).
 --
 -- Principio: ewf_app legge tutto, scrive solo cio' che l'applicazione scrive davvero.
--- Definizioni dei processi e organizzazione (salvo password e sostituzioni) si cambiano con ewf_owner.
+-- Le definizioni dei processi le modifica il designer, ma solo nelle bozze: lo garantiscono anche i trigger
+-- guard_definition e guard_process_version (schema 0.16).
 
 BEGIN;
 
@@ -28,6 +29,12 @@ GRANT INSERT ON ewf_core.audit_event TO ewf_app;
 -- Commenti e allegati: aggiunte; degli allegati solo la cancellazione logica
 GRANT INSERT ON ewf_core.comment, ewf_core.attachment, ewf_core.attachment_content TO ewf_app;
 GRANT UPDATE (deleted_at, deleted_by) ON ewf_core.attachment TO ewf_app;
+
+-- Designer dei processi: versioni in bozza, step, task, agganci, opzioni, funzioni
+GRANT INSERT, DELETE ON ewf_core.process_version TO ewf_app;
+GRANT UPDATE (status, activated_at, note, end_handler_id, end_handler_config) ON ewf_core.process_version TO ewf_app;
+GRANT INSERT, UPDATE, DELETE ON ewf_core.step_def, ewf_core.task_def, ewf_core.task_hook,
+                                ewf_core.task_option, ewf_core.task_function TO ewf_app;
 
 -- Regole di avvio (gestibili dall'applicazione)
 GRANT INSERT, UPDATE, DELETE ON ewf_core.start_rule TO ewf_app;

@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="se_0" beanbinding="#{d.StepEditUI}" />
+<t:rowbodypane id="se_1" padding="14" rowdistance="8" >
+<t:row id="se_2" coldistance="10" >
+<t:field id="se_2a" labeltext="Numero" text="#{d.StepEditUI.stepNo}" width="80" />
+<t:combobox id="se_2b" labeltext="Ramo" validvaluesbinding="#{d.StepEditUI.optionsVVB}" value="#{d.StepEditUI.option}" width="240" />
+<t:checkbox id="se_2c" selected="#{d.StepEditUI.first}" text="Primo step" />
+</t:row>
+<t:row id="se_3" coldistance="10" >
+<t:combobox id="se_3a" labeltext="Se approvato, va a" validvaluesbinding="#{d.StepEditUI.stepsVVB}" value="#{d.StepEditUI.nextOk}" width="200" />
+<t:combobox id="se_3b" labeltext="Se respinto, va a" validvaluesbinding="#{d.StepEditUI.stepsVVB}" value="#{d.StepEditUI.nextKo}" width="200" />
+</t:row>
+<t:row id="se_4" coldistance="10" >
+<t:field id="se_4a" labeltext="Soglia (vuota = sempre)" text="#{d.StepEditUI.minAmount}" tooltip="Lo step serve solo se il valore del documento e' maggiore o uguale" width="140" />
+<t:field id="se_4b" labeltext="Divisa" text="#{d.StepEditUI.currency}" width="60" />
+<t:combobox id="se_4c" labeltext="Task paralleli" validvaluesbinding="#{d.StepEditUI.joinVVB}" value="#{d.StepEditUI.join}" width="200" />
+</t:row>
+<t:row id="se_5" coldistance="8" >
+<t:coldistance id="se_5d" width="100%" />
+<t:button id="se_5s" actionListener="#{d.StepEditUI.onSave}" text="Salva step" width="110" />
+</t:row>
+<t:rowdistance id="se_6" height="6" />
+<t:row id="se_7" coldistance="8" >
+<t:label id="se_7l" font="weight:bold" text="Task dello step" />
+<t:coldistance id="se_7d" width="100%" />
+<t:button id="se_7n" actionListener="#{d.StepEditUI.onNewTask}" enabled="#{d.StepEditUI.existing}" text="Nuovo task" width="110" />
+</t:row>
+<t:row id="se_8" rendered="#{d.StepEditUI.notExisting}" >
+<t:label id="se_8l" foreground="#777777" text="I task si aggiungono dopo aver salvato lo step." />
+</t:row>
+<t:row id="se_9" rendered="#{d.StepEditUI.existing}" >
+<t:fixgrid id="se_g" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.StepEditUI.tasks}" sbvisibleamount="6" width="100%" >
+<t:gridcol id="se_c1" text="Task" width="100%" >
+<t:label id="se_c1l" font="weight:bold" text=".{text}" />
+</t:gridcol>
+<t:gridcol id="se_c2" text="Chi" width="190" >
+<t:label id="se_c2l" text=".{who}" />
+</t:gridcol>
+<t:gridcol id="se_c3" text="Peso" width="50" >
+<t:label id="se_c3l" align="right" text=".{weight}" />
+</t:gridcol>
+<t:gridcol id="se_c4" text="Altro" width="130" >
+<t:label id="se_c4l" foreground="#546E7A" text=".{extras}" />
+</t:gridcol>
+<t:gridcol id="se_c5" text="" width="80" >
+<t:button id="se_c5b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="se_c6" text="" width="80" >
+<t:button id="se_c6b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:rowdistance id="se_10" height="100%" />
+<t:row id="se_11" coldistance="8" >
+<t:coldistance id="se_11d" width="100%" />
+<t:button id="se_11c" actionListener="#{d.StepEditUI.onClose}" text="Chiudi" width="100" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="te_0" beanbinding="#{d.TaskEditUI}" />
+<t:rowbodypane id="te_1" padding="14" rowdistance="8" >
+<t:row id="te_2" >
+<t:field id="te_2a" labeltext="Testo" text="#{d.TaskEditUI.text}" width="100%" />
+</t:row>
+<t:row id="te_3" >
+<t:combobox id="te_3a" actionListener="#{d.TaskEditUI.onModeChanged}" flush="true" labeltext="Chi lo esegue" validvaluesbinding="#{d.TaskEditUI.modesVVB}" value="#{d.TaskEditUI.mode}" width="320" />
+</t:row>
+<t:row id="te_4" rendered="#{d.TaskEditUI.rulesMode}" >
+<t:combobox id="te_4a" labeltext="Ruolo" validvaluesbinding="#{d.TaskEditUI.rolesVVB}" value="#{d.TaskEditUI.role}" width="320" withnullitem="true" />
+</t:row>
+<t:row id="te_5" rendered="#{d.TaskEditUI.handlerMode}" >
+<t:combobox id="te_5a" labeltext="Handler" validvaluesbinding="#{d.TaskEditUI.handlersVVB}" value="#{d.TaskEditUI.handler}" width="320" withnullitem="true" />
+</t:row>
+<t:row id="te_6" coldistance="10" >
+<t:combobox id="te_6a" labeltext="Team fisso (vuoto = dalle regole)" validvaluesbinding="#{d.TaskEditUI.teamsVVB}" value="#{d.TaskEditUI.team}" width="240" withnullitem="true" />
+<t:checkbox id="te_6b" selected="#{d.TaskEditUI.teamTask}" text="Task di team (lo vedono e firmano i membri)" />
+</t:row>
+<t:row id="te_7" coldistance="10" >
+<t:field id="te_7a" labeltext="Peso richiesto" text="#{d.TaskEditUI.weight}" tooltip="Per approvare serve un peso uguale o maggiore" width="90" />
+<t:combobox id="te_7b" labeltext="Nel percorso mostra" validvaluesbinding="#{d.TaskEditUI.previewVVB}" value="#{d.TaskEditUI.preview}" width="180" />
+</t:row>
+<t:row id="te_8" coldistance="10" >
+<t:combobox id="te_8a" labeltext="Si esegue" validvaluesbinding="#{d.TaskEditUI.interactionVVB}" value="#{d.TaskEditUI.interaction}" width="180" />
+<t:combobox id="te_8b" labeltext="Avviso all'arrivo" validvaluesbinding="#{d.TaskEditUI.notifyVVB}" value="#{d.TaskEditUI.notify}" width="220" />
+</t:row>
+<t:row id="te_9" >
+<t:field id="te_9a" labeltext="Parametro (ZWF_TASK_PARAM)" text="#{d.TaskEditUI.taskParam}" width="200" />
+</t:row>
+<t:row id="te_12" coldistance="8" >
+<t:coldistance id="te_12d" width="100%" />
+<t:button id="te_12s" actionListener="#{d.TaskEditUI.onSave}" font="weight:bold" text="Salva task" width="110" />
+</t:row>
+<t:row id="te_10" rendered="#{d.TaskEditUI.notExisting}" >
+<t:label id="te_10l" foreground="#777777" text="Agganci, opzioni e funzioni si aggiungono dopo aver salvato il task." />
+</t:row>
+
+<!-- ===== Agganci ===== -->
+<t:row id="te_h" rendered="#{d.TaskEditUI.existing}" >
+<t:foldablepane id="te_hp" opened="true" rowdistance="6" text="#{d.TaskEditUI.hooksTitle}" width="100%" >
+<t:row id="te_h1" >
+<t:fixgrid id="te_hg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskEditUI.hooks}" sbvisibleamount="5" width="100%" >
+<t:gridcol id="te_hc1" text="Quando" width="140" >
+<t:label id="te_hc1l" font="weight:bold" text=".{event}" />
+</t:gridcol>
+<t:gridcol id="te_hc2" text="Handler" width="230" >
+<t:label id="te_hc2l" text=".{handler}" />
+</t:gridcol>
+<t:gridcol id="te_hc3" text="Etichetta e parametri" width="100%" >
+<t:label id="te_hc3l" foreground="#546E7A" text=".{detail}" />
+</t:gridcol>
+<t:gridcol id="te_hc4" text="" width="80" >
+<t:button id="te_hc4b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="te_hc5" text="" width="80" >
+<t:button id="te_hc5b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="te_h2" coldistance="8" >
+<t:label id="te_h2l" font="weight:bold;color:#1565C0" text="#{d.TaskEditUI.hookFormTitle}" />
+</t:row>
+<t:row id="te_h3" coldistance="8" >
+<t:combobox id="te_h3a" actionListener="#{d.TaskEditUI.onNoop}" flush="true" labeltext="Quando" validvaluesbinding="#{d.TaskEditUI.eventsVVB}" value="#{d.TaskEditUI.hookEvent}" width="230" />
+<t:combobox id="te_h3b" labeltext="Handler" validvaluesbinding="#{d.TaskEditUI.actionsVVB}" value="#{d.TaskEditUI.hookHandler}" width="300" withnullitem="true" />
+<t:field id="te_h3c" labeltext="Etichetta del pulsante" rendered="#{d.TaskEditUI.buttonHook}" text="#{d.TaskEditUI.hookLabel}" width="160" />
+</t:row>
+<t:row id="te_h4" coldistance="8" >
+<t:field id="te_h4a" labeltext="Parametri (JSON, facoltativi)" text="#{d.TaskEditUI.hookConfig}" tooltip="Esempio: {&quot;release_code&quot;:&quot;01&quot;}" width="100%" />
+<t:button id="te_h4n" actionListener="#{d.TaskEditUI.onNewHook}" text="Svuota" width="80" />
+<t:button id="te_h4s" actionListener="#{d.TaskEditUI.onSaveHook}" text="Salva aggancio" width="120" />
+</t:row>
+</t:foldablepane>
+</t:row>
+
+<!-- ===== Opzioni ===== -->
+<t:row id="te_o" rendered="#{d.TaskEditUI.existing}" >
+<t:foldablepane id="te_op" opened="true" rowdistance="6" text="#{d.TaskEditUI.optionsTitle}" width="100%" >
+<t:row id="te_o1" >
+<t:fixgrid id="te_og" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskEditUI.options}" sbvisibleamount="5" width="100%" >
+<t:gridcol id="te_oc1" text="Codice" width="70" >
+<t:label id="te_oc1l" font="weight:bold" text=".{code}" />
+</t:gridcol>
+<t:gridcol id="te_oc2" text="Testo" width="100%" >
+<t:label id="te_oc2l" text=".{label}" />
+</t:gridcol>
+<t:gridcol id="te_oc3" text="Effetto" width="200" >
+<t:label id="te_oc3l" foreground=".{effectColor}" text=".{effect}" />
+</t:gridcol>
+<t:gridcol id="te_oc4" text="Handler" width="160" >
+<t:label id="te_oc4l" text=".{handler}" />
+</t:gridcol>
+<t:gridcol id="te_oc5" text="" width="80" >
+<t:button id="te_oc5b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="te_oc6" text="" width="80" >
+<t:button id="te_oc6b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="te_o2" >
+<t:label id="te_o2l" font="weight:bold;color:#1565C0" text="#{d.TaskEditUI.optionFormTitle}" />
+</t:row>
+<t:row id="te_o3" coldistance="8" >
+<t:field id="te_o3a" labeltext="Codice" text="#{d.TaskEditUI.optCode}" tooltip="Da 1 a 10 tra lettere, cifre e _; e' anche il nome del ramo" width="80" />
+<t:field id="te_o3b" labeltext="Testo" text="#{d.TaskEditUI.optLabel}" width="220" />
+<t:combobox id="te_o3c" actionListener="#{d.TaskEditUI.onNoop}" flush="true" labeltext="Effetto" validvaluesbinding="#{d.TaskEditUI.effectsVVB}" value="#{d.TaskEditUI.optEffect}" width="320" />
+</t:row>
+<t:row id="te_o4" coldistance="8" >
+<t:combobox id="te_o4a" labeltext="Processo da avviare" rendered="#{d.TaskEditUI.spawnOption}" validvaluesbinding="#{d.TaskEditUI.typesVVB}" value="#{d.TaskEditUI.optProcess}" width="260" withnullitem="true" />
+<t:combobox id="te_o4b" labeltext="Handler alla scelta (facoltativo)" validvaluesbinding="#{d.TaskEditUI.actionsVVB}" value="#{d.TaskEditUI.optHandler}" width="260" withnullitem="true" />
+<t:field id="te_o4c" labeltext="Parametri (JSON)" text="#{d.TaskEditUI.optConfig}" width="100%" />
+</t:row>
+<t:row id="te_o5" coldistance="8" >
+<t:coldistance id="te_o5d" width="100%" />
+<t:button id="te_o5n" actionListener="#{d.TaskEditUI.onNewOption}" text="Svuota" width="80" />
+<t:button id="te_o5s" actionListener="#{d.TaskEditUI.onSaveOption}" text="Salva opzione" width="120" />
+</t:row>
+</t:foldablepane>
+</t:row>
+
+<!-- ===== Funzioni speciali ===== -->
+<t:row id="te_f" rendered="#{d.TaskEditUI.existing}" >
+<t:foldablepane id="te_fp" opened="false" rowdistance="6" text="#{d.TaskEditUI.functionsTitle}" width="100%" >
+<t:row id="te_f1" >
+<t:fixgrid id="te_fg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.TaskEditUI.functions}" sbvisibleamount="4" width="100%" >
+<t:gridcol id="te_fc1" text="Codice" width="110" >
+<t:label id="te_fc1l" font="weight:bold" text=".{code}" />
+</t:gridcol>
+<t:gridcol id="te_fc2" text="Pulsante" width="160" >
+<t:label id="te_fc2l" text=".{label}" />
+</t:gridcol>
+<t:gridcol id="te_fc3" text="Handler" width="170" >
+<t:label id="te_fc3l" text=".{handler}" />
+</t:gridcol>
+<t:gridcol id="te_fc4" text="Conferma" width="100%" >
+<t:label id="te_fc4l" foreground="#546E7A" text=".{confirm}" />
+</t:gridcol>
+<t:gridcol id="te_fc5" text="" width="80" >
+<t:button id="te_fc5b" actionListener=".{onEdit}" text="Modifica" width="72" />
+</t:gridcol>
+<t:gridcol id="te_fc6" text="" width="80" >
+<t:button id="te_fc6b" actionListener=".{onDelete}" text="Elimina" width="72" />
+</t:gridcol>
+</t:fixgrid>
+</t:row>
+<t:row id="te_f2" >
+<t:label id="te_f2l" font="weight:bold;color:#1565C0" text="#{d.TaskEditUI.functionFormTitle}" />
+</t:row>
+<t:row id="te_f3" coldistance="8" >
+<t:field id="te_f3a" labeltext="Codice" text="#{d.TaskEditUI.fnCode}" width="110" />
+<t:field id="te_f3b" labeltext="Pulsante" text="#{d.TaskEditUI.fnLabel}" width="170" />
+<t:combobox id="te_f3c" labeltext="Handler" validvaluesbinding="#{d.TaskEditUI.actionsVVB}" value="#{d.TaskEditUI.fnHandler}" width="240" withnullitem="true" />
+</t:row>
+<t:row id="te_f4" coldistance="8" >
+<t:field id="te_f4a" labeltext="Domanda di conferma (facoltativa)" text="#{d.TaskEditUI.fnConfirm}" width="100%" />
+<t:button id="te_f4n" actionListener="#{d.TaskEditUI.onNewFunction}" text="Svuota" width="80" />
+<t:button id="te_f4s" actionListener="#{d.TaskEditUI.onSaveFunction}" text="Salva funzione" width="120" />
+</t:row>
+</t:foldablepane>
+</t:row>
+
+<t:rowdistance id="te_11" height="100%" />
+<t:row id="te_13" coldistance="8" >
+<t:coldistance id="te_13d" width="100%" />
+<t:button id="te_13c" actionListener="#{d.TaskEditUI.onCancel}" text="Chiudi" width="100" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>
