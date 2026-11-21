@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="ty_0" beanbinding="#{d.TypeEditUI}" />
+<t:rowbodypane id="ty_1" padding="14" rowdistance="8" >
+<t:row id="ty_2" coldistance="10" >
+<t:field id="ty_2a" enabled="#{d.TypeEditUI.newType}" labeltext="Codice" text="#{d.TypeEditUI.code}" tooltip="Da 2 a 20 tra lettere, cifre e _; non si cambia piu'" width="160" />
+<t:field id="ty_2b" labeltext="Descrizione" text="#{d.TypeEditUI.description}" width="100%" />
+</t:row>
+<t:row id="ty_3" rendered="#{d.TypeEditUI.newType}" >
+<t:combobox id="ty_3a" actionListener="#{d.TypeEditUI.onNoop}" flush="true" labeltext="Tipo documento" validvaluesbinding="#{d.TypeEditUI.docTypesVVB}" value="#{d.TypeEditUI.docType}" width="100%" withnullitem="true" />
+</t:row>
+<t:row id="ty_3e" rendered="#{d.TypeEditUI.existingType}" >
+<t:label id="ty_3el" font="weight:bold" text="#{d.TypeEditUI.docTypeText}" />
+</t:row>
+<t:row id="ty_4" coldistance="10" rendered="#{d.TypeEditUI.newDocType}" >
+<t:field id="ty_4a" labeltext="Codice del nuovo tipo documento" text="#{d.TypeEditUI.newDocCode}" width="160" />
+<t:field id="ty_4b" labeltext="Descrizione" text="#{d.TypeEditUI.newDocDescription}" width="100%" />
+</t:row>
+<t:row id="ty_4n" rendered="#{d.TypeEditUI.newDocType}" >
+<t:label id="ty_4nl" foreground="#546E7A" text="Un tipo documento nuovo non ha un sistema di origine: i dati del processo arrivano dalla richiesta." />
+</t:row>
+<t:row id="ty_5" coldistance="16" >
+<t:checkbox id="ty_5a" selected="#{d.TypeEditUI.manualStart}" text="Avviabile a mano" />
+<t:checkbox id="ty_5b" selected="#{d.TypeEditUI.suspended}" text="Sospeso (non parte nessun nuovo processo)" />
+</t:row>
+<t:row id="ty_6" >
+<t:field id="ty_6a" labeltext="Riepilogo nella lista" text="#{d.TypeEditUI.summary}" tooltip="Testo con segnaposto, es. {sap.LIFNR_TXT} - {plant}" width="100%" />
+</t:row>
+<t:row id="ty_7" >
+<t:textarea id="ty_7a" height="70" labeltext="Colonne specifiche (una per riga: Etichetta = chiave)" text="#{d.TypeEditUI.columns}" width="100%" />
+</t:row>
+<t:row id="ty_8" coldistance="10" >
+<t:field id="ty_8a" labeltext="Giallo dal giorno" text="#{d.TypeEditUI.yellow}" width="90" />
+<t:field id="ty_8b" labeltext="Rosso dal giorno" text="#{d.TypeEditUI.red}" width="90" />
+<t:combobox id="ty_8c" labeltext="Allegati" validvaluesbinding="#{d.TypeEditUI.scopeVVB}" value="#{d.TypeEditUI.scope}" width="280" />
+</t:row>
+<t:rowdistance id="ty_9" height="100%" />
+<t:row id="ty_10" coldistance="8" >
+<t:coldistance id="ty_10d" width="100%" />
+<t:button id="ty_10n" actionListener="#{d.TypeEditUI.onCancel}" text="Annulla" width="100" />
+<t:button id="ty_10s" actionListener="#{d.TypeEditUI.onSave}" text="Salva" width="100" />
+</t:row>
+</t:rowbodypane>
+
+</t:layoutdefinition>

@@ -264,7 +264,7 @@ public final class StartRuleService {
         return b.append('}').toString();
     }
 
-    private static String quote(String s) {
+    static String quote(String s) {
         StringBuilder b = new StringBuilder("\"");
         for (char ch : s.toCharArray()) {
             switch (ch) {

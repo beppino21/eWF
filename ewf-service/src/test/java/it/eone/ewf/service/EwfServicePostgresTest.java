@@ -592,6 +592,40 @@ public class EwfServicePostgresTest {
     }
 
     @Test
+    void nuovoTipoProcessoSenzaSistemaDiOrigine() {
+        DesignerService d = new DesignerService(db, admin());
+        DesignerService.TypeEdit t = new DesignerService.TypeEdit("rich_it", "Richiesta acquisto IT", "ric", "Richiesta interna",
+                true, false, "{descr} - {importo}", "Descrizione = descr\nCentro di costo = cdc", 3, 7, "PROCESS");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.createProcessType(VERDI,
+                new DesignerService.TypeEdit("X1", "x", "NUOVO", null, false, false, null, null, 6, 11, "PROCESS"))).code(),
+                "tipo documento nuovo senza descrizione");
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.createProcessType(VERDI,
+                new DesignerService.TypeEdit("X1", "x", "F", null, false, false, null, null, 5, 5, "PROCESS"))).code(),
+                "rosso non dopo il giallo");
+        long v1 = d.createProcessType(VERDI, t);
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.createProcessType(VERDI, t)).code(), "doppione");
+        assertTrue(d.docTypes(VERDI).stream().anyMatch(c -> c.code().equals("RIC") && c.text().contains("senza sistema")));
+        assertEquals("DRAFT", d.versions(VERDI, "RICH_IT").get(0).status());
+        assertTrue(d.view(VERDI, v1).hasErrors(), "versione vuota: niente primo step");
+
+        DesignerService.TypeEdit back = d.typeSettings(VERDI, "RICH_IT");
+        assertEquals("Descrizione = descr\nCentro di costo = cdc\n", back.listColumns());
+        assertEquals(3, back.slaYellowDays());
+        d.saveProcessType(VERDI, new DesignerService.TypeEdit("RICH_IT", "Richiesta di acquisto IT", null, null, true, false,
+                back.listSummary(), "Importo = importo", 3, 7, "PROCESS"));
+        assertEquals("[{\"key\": \"importo\", \"label\": \"Importo\"}]",
+                value("SELECT list_columns::text FROM ewf_core.process_type WHERE code = 'RICH_IT'"));
+
+        // disegno minimo, attivazione e avvio senza sistema di origine
+        long s10 = d.saveStep(VERDI, v1, new DesignerService.StepEdit(null, 10, null, true, "ALL", null, null, null, null));
+        d.saveTask(VERDI, v1, new DesignerService.TaskEdit(null, s10, "Approvazione responsabile IT", "RULES", "APPROVATORE",
+                null, false, null, 0, null, null, null, null));
+        d.activate(VERDI, v1);
+        long p = engine.start(new it.eone.ewf.engine.Requests.Start("RICH_IT", "RIC-0001", null, ROSSI, null)).id;
+        assertEquals("RUNNING", value("SELECT status FROM ewf_core.process_instance WHERE id = " + p));
+    }
+
+    @Test
     void designerConsultaTipiVersioniEValidazione() {
         DesignerService d = new DesignerService(db, admin());
         assertEquals(Code.NOT_AUTHORIZED, assertThrows(ServiceException.class, () -> d.types(ROSSI)).code());

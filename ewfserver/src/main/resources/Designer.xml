@@ -13,8 +13,11 @@
 
 <!-- ===== Tipi processo e versioni ===== -->
 <t:pane id="ds_l" height="100%" rowalignmenty="top" rowdistance="10" width="470" >
-<t:row id="ds_l1" >
+<t:row id="ds_l1" coldistance="6" >
 <t:label id="ds_l1l" font="weight:bold" text="Tipi processo" />
+<t:coldistance id="ds_l1d" width="100%" />
+<t:button id="ds_l1p" actionListener="#{d.DesignerUI.onTypeSettings}" enabled="#{d.DesignerUI.typeSelected}" text="Proprietà" width="90" />
+<t:button id="ds_l1n" actionListener="#{d.DesignerUI.onNewType}" text="Nuovo tipo processo" width="150" />
 </t:row>
 <t:row id="ds_l2" >
 <t:fixgrid id="ds_tg" avoidrowstretching="true" dynamicheightsizing="true" objectbinding="#{d.DesignerUI.types}" sbvisibleamount="12" width="100%" >

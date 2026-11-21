@@ -71,7 +71,10 @@ public class DesignerUI extends PageBean implements Serializable {
             for (TypeRow t : designer().types(uid())) {
                 TypeItem it = new TypeItem(t);
                 m_types.getItems().add(it);
-                if (t.code().equals(m_type)) m_types.selectItem(it);
+                if (t.code().equals(m_type)) {
+                    m_types.selectItem(it);
+                    m_typeDescription = t.description();
+                }
             }
         } catch (ServiceException e) {
             Statusbar.outputError(e.getMessage());
@@ -224,6 +227,29 @@ public class DesignerUI extends PageBean implements Serializable {
     }
 
     public void onNewStep(ActionEvent ae) { openStep(null); }
+
+    public void onNewType(ActionEvent ae) { openType(null); }
+
+    public void onTypeSettings(ActionEvent ae) { if (m_type != null) openType(m_type); }
+
+    private void openType(String code) {
+        TypeEditUI ui = new TypeEditUI();
+        ui.prepare(code, new TypeEditUI.IListener() {
+            @Override public void saved(String typeCode, Long draftId) {
+                closePopup(ui);
+                m_type = typeCode;
+                if (draftId != null) m_versionId = draftId;
+                Statusbar.outputSuccess(draftId != null ? "Tipo processo " + typeCode + " creato con la versione 1 in bozza"
+                        : "Proprieta' salvate");
+                reloadTypes();
+            }
+            @Override public void cancelled() { closePopup(ui); }
+        });
+        openModalPopup(ui, code == null ? "Nuovo tipo processo" : "Proprieta' di " + code, 680, 560,
+                new ModalPopup.IModalPopupListener() {
+                    @Override public void reactOnPopupClosedByUser() { closePopup(ui); }
+                });
+    }
 
     private void openStep(StepRow r) {
         if (!isDraft()) return;

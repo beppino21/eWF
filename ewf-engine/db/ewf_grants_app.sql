@@ -52,6 +52,12 @@ GRANT UPDATE (description) ON ewf_org.team TO ewf_app;
 GRANT INSERT, DELETE ON ewf_org.team_member TO ewf_app;
 GRANT UPDATE (valid_from, valid_to) ON ewf_org.team_member TO ewf_app;
 
+-- Tipi processo e tipi documento creati dal designer (il codice non cambia; gli indicatori del legacy restano fuori)
+GRANT INSERT ON ewf_core.doc_type, ewf_core.process_type TO ewf_app;
+GRANT UPDATE (description) ON ewf_core.doc_type TO ewf_app;
+GRANT UPDATE (description, manual_start, suspended, list_summary, list_columns, sla_yellow_days, sla_red_days,
+              attachment_scope) ON ewf_core.process_type TO ewf_app;
+
 -- Ruoli e regole di assegnazione, gestiti dagli amministratori (il codice del ruolo non cambia)
 GRANT INSERT, DELETE ON ewf_org.role TO ewf_app;
 GRANT UPDATE (description) ON ewf_org.role TO ewf_app;

@@ -1003,4 +1003,174 @@ public final class DesignerService {
     private static String emptyJson(String j) {
         return j == null || j.equals("{}") ? "" : j;
     }
+
+    // ================================================================== tipi processo e tipi documento
+
+    /**
+     * Proprieta' di un tipo processo. newDocTypeDescription: se docType non esiste ancora, lo si crea con questa
+     * descrizione (senza collegamento a un sistema di origine: i dati arrivano dalla richiesta).
+     * listColumns: una colonna per riga, "Etichetta = chiave".
+     */
+    public record TypeEdit(String code, String description, String docType, String newDocTypeDescription,
+                           boolean manualStart, boolean suspended, String listSummary, String listColumns,
+                           int slaYellowDays, int slaRedDays, String attachmentScope) {}
+
+    public List<Choice> docTypes(long adminId) {
+        requireAdmin(adminId);
+        return choices("""
+                SELECT d.code, d.description || CASE WHEN d.adapter_handler_id IS NULL THEN ' (senza sistema di origine)'
+                                                     ELSE '' END
+                  FROM ewf_core.doc_type d ORDER BY d.code""");
+    }
+
+    public TypeEdit typeSettings(long adminId, String code) {
+        requireAdmin(adminId);
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    SELECT code, description, doc_type, manual_start, suspended, list_summary, list_columns::text,
+                           sla_yellow_days, sla_red_days, attachment_scope
+                      FROM ewf_core.process_type WHERE code = ?""")) {
+                ps.setString(1, code);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (!rs.next()) throw new ServiceException(Code.NOT_FOUND, "Tipo processo inesistente");
+                    return new TypeEdit(rs.getString(1), rs.getString(2), rs.getString(3), null, rs.getBoolean(4),
+                            rs.getBoolean(5), rs.getString(6), columnsText(rs.getString(7)), rs.getInt(8), rs.getInt(9),
+                            rs.getString(10));
+                }
+            }
+        });
+    }
+
+    /** Crea il tipo processo (ed eventualmente il tipo documento) con la versione 1 vuota in bozza. @return id della bozza */
+    public long createProcessType(long adminId, TypeEdit e) {
+        requireAdmin(adminId);
+        String code = e.code() == null ? "" : e.code().trim().toUpperCase();
+        if (!code.matches("[A-Z0-9_]{2,20}"))
+            throw new ServiceException(Code.INVALID, "Codice del tipo processo: da 2 a 20 tra lettere, cifre e _");
+        String docType = e.docType() == null ? "" : e.docType().trim().toUpperCase();
+        if (!docType.matches("[A-Z0-9_]{1,20}"))
+            throw new ServiceException(Code.INVALID, "Tipo documento: da 1 a 20 tra lettere, cifre e _");
+        checkType(e);
+        String columns = columnsJson(e.listColumns());
+        return tx(() -> db.with(c -> {
+            if (count(c, "SELECT count(*) FROM ewf_core.process_type WHERE code = ?", code) > 0)
+                throw new ServiceException(Code.INVALID, "Il tipo processo " + code + " esiste gia'");
+            if (count(c, "SELECT count(*) FROM ewf_core.doc_type WHERE code = ?", docType) == 0) {
+                if (blank(e.newDocTypeDescription()))
+                    throw new ServiceException(Code.INVALID, "Il tipo documento " + docType + " non esiste: indicarne la descrizione"
+                            + " per crearlo");
+                try (PreparedStatement ps = c.prepareStatement("INSERT INTO ewf_core.doc_type(code, description) VALUES (?, ?)")) {
+                    ps.setString(1, docType);
+                    ps.setString(2, e.newDocTypeDescription().trim());
+                    ps.executeUpdate();
+                }
+            }
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO ewf_core.process_type(code, description, doc_type, manual_start, suspended, list_summary,
+                           list_columns, sla_yellow_days, sla_red_days, attachment_scope)
+                    VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)""")) {
+                ps.setString(1, code);
+                ps.setString(2, e.description().trim());
+                ps.setString(3, docType);
+                ps.setBoolean(4, e.manualStart());
+                ps.setBoolean(5, e.suspended());
+                ps.setString(6, trimToNull(e.listSummary()));
+                ps.setString(7, columns);
+                ps.setInt(8, e.slaYellowDays());
+                ps.setInt(9, e.slaRedDays());
+                ps.setString(10, e.attachmentScope());
+                ps.executeUpdate();
+            }
+            try (PreparedStatement ps = c.prepareStatement("""
+                    INSERT INTO ewf_core.process_version(process_type_code, version_no, status, created_by, note)
+                    VALUES (?, 1, 'DRAFT', ?, 'Prima versione') RETURNING id""")) {
+                ps.setString(1, code);
+                ps.setLong(2, adminId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    rs.next();
+                    return rs.getLong(1);
+                }
+            }
+        }));
+    }
+
+    /** Modifica le proprieta' di un tipo processo (codice e tipo documento non cambiano). */
+    public void saveProcessType(long adminId, TypeEdit e) {
+        requireAdmin(adminId);
+        checkType(e);
+        String columns = columnsJson(e.listColumns());
+        tx(() -> db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement("""
+                    UPDATE ewf_core.process_type SET description = ?, manual_start = ?, suspended = ?, list_summary = ?,
+                           list_columns = ?::jsonb, sla_yellow_days = ?, sla_red_days = ?, attachment_scope = ?
+                     WHERE code = ?""")) {
+                ps.setString(1, e.description().trim());
+                ps.setBoolean(2, e.manualStart());
+                ps.setBoolean(3, e.suspended());
+                ps.setString(4, trimToNull(e.listSummary()));
+                ps.setString(5, columns);
+                ps.setInt(6, e.slaYellowDays());
+                ps.setInt(7, e.slaRedDays());
+                ps.setString(8, e.attachmentScope());
+                ps.setString(9, e.code());
+                if (ps.executeUpdate() == 0) throw new ServiceException(Code.NOT_FOUND, "Tipo processo inesistente");
+            }
+            return null;
+        }));
+    }
+
+    private static void checkType(TypeEdit e) {
+        if (blank(e.description())) throw new ServiceException(Code.INVALID, "La descrizione e' obbligatoria");
+        if (e.description().trim().length() > 80) throw new ServiceException(Code.INVALID, "Descrizione: al massimo 80 caratteri");
+        if (e.slaYellowDays() <= 0 || e.slaRedDays() <= e.slaYellowDays())
+            throw new ServiceException(Code.INVALID, "Semaforo: il giallo deve essere almeno 1 giorno e il rosso dopo il giallo");
+        if (!List.of("PROCESS", "DOCUMENT", "BOTH").contains(e.attachmentScope()))
+            throw new ServiceException(Code.INVALID, "Modalita' degli allegati non valida");
+        if (e.listSummary() != null && e.listSummary().length() > 500)
+            throw new ServiceException(Code.INVALID, "Riepilogo: al massimo 500 caratteri");
+    }
+
+    /** "Etichetta = chiave" per riga -> [{"label":"...","key":"..."}]. */
+    static String columnsJson(String text) {
+        StringBuilder b = new StringBuilder("[");
+        if (text != null)
+            for (String line : text.split("\\R")) {
+                String l = line.trim();
+                if (l.isEmpty()) continue;
+                int i = l.indexOf('=');
+                if (i <= 0 || i == l.length() - 1)
+                    throw new ServiceException(Code.INVALID, "Colonne: una per riga, \"Etichetta = chiave\" (riga: " + l + ")");
+                if (b.length() > 1) b.append(',');
+                b.append("{\"label\":").append(StartRuleService.quote(l.substring(0, i).trim()))
+                 .append(",\"key\":").append(StartRuleService.quote(l.substring(i + 1).trim()))
+                 .append('}');
+            }
+        return b.append(']').toString();
+    }
+
+    /** Il contrario di {@link #columnsJson}, letto con PostgreSQL per non dipendere da una libreria JSON. */
+    private String columnsText(String json) {
+        if (json == null || json.isBlank() || json.equals("[]")) return "";
+        return db.with(c -> {
+            try (PreparedStatement ps = c.prepareStatement(
+                    "SELECT e->>'label', e->>'key' FROM jsonb_array_elements(?::jsonb) e")) {
+                ps.setString(1, json);
+                StringBuilder b = new StringBuilder();
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) b.append(rs.getString(1)).append(" = ").append(rs.getString(2)).append('\n');
+                }
+                return b.toString();
+            }
+        });
+    }
+
+    private static long count(Connection c, String sql, String p) throws SQLException {
+        try (PreparedStatement ps = c.prepareStatement(sql)) {
+            ps.setString(1, p);
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
 }
