@@ -61,6 +61,12 @@ public class LogonUI extends PageBean implements Serializable {
         m_listener = listener;
     }
 
+    /** Telefono: niente immagine a sinistra, il modulo occupa tutta la larghezza. */
+    private boolean m_mobile;
+    public void setMobile(boolean v) { m_mobile = v; }
+    public boolean isDesktop() { return !m_mobile; }
+    public String getFormWidth() { return m_mobile ? "100%" : "50%"; }
+
     /** Pagina usata dal menu "Cambio password": utente fisso, alla fine (o su Annulla) avvisa il chiamante. */
     public void prepareChange(AuthService.Session user, IChangeListener listener) {
         m_inSession = user;

@@ -23,6 +23,10 @@ import java.util.Optional;
  * Mostra il logon e, dopo l'accesso, lista e dettaglio dentro rowpagebeaninclude.
  *
  * Collegamento diretto (mail di avviso): .../Outest.risc?task=8000000027 apre il task dopo il logon.
+ *
+ * Telefono: se il browser si dichiara "Mobi" (iPhone, telefoni Android) dopo il logon si apre la versione
+ * mobile (MobileTasksUI / MobileTaskUI) al posto del menu. ?mobile=1 la forza, ?mobile=0 la esclude;
+ * dalla lista mobile "Versione completa" passa al menu desktop.
  */
 @CCGenClass(expressionBase = "#{d.OutestUI}")
 public class OutestUI extends WorkpageDispatchedPageBean implements Serializable {
@@ -32,6 +36,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
     private IPageBean m_contentUI;
     private WorklistUI m_worklistUI;
     private Long m_pendingTask;
+    private boolean m_mobile;
 
     private boolean m_admin;
     private String m_substituting = "";   // "sostituisce oggi: ..." (aggiornato al logon e a ogni ritorno al menu)
@@ -53,6 +58,9 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
             jakarta.servlet.http.HttpServletRequest req = HttpSessionAccess.getCurrentRequest();
             String t = req == null ? null : req.getParameter("task");
             if (t != null && t.trim().matches("\\d{1,18}")) m_pendingTask = Long.parseLong(t.trim());
+            String m = req == null ? null : req.getParameter("mobile");
+            String ua = req == null ? null : req.getHeader("User-Agent");
+            m_mobile = "1".equals(m) || (!"0".equals(m) && ua != null && ua.contains("Mobi"));
         } catch (Exception e) {
             System.err.println("[OutestUI] Parametro task non leggibile: " + e.getMessage());
         }
@@ -63,6 +71,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
     private void showLogon() {
         LogonUI ui = new LogonUI();
         ui.prepare(this::afterLogon);
+        ui.setMobile(m_mobile);
         m_contentUI = ui;
     }
 
@@ -77,14 +86,14 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         if (task != null) {
             Optional<WorkItem> w = findTask(task);
             if (w.isPresent()) {
-                showDetail(w.get().processId());
+                if (m_mobile) showMobileDetail(w.get().processId()); else showDetail(w.get().processId());
                 return;
             }
-            showWorklist();
+            if (m_mobile) showMobileTasks(); else showWorklist();
             Statusbar.outputWarning("L'attivita' " + task + " non e' piu' tra le tue: forse e' gia' stata completata.");
             return;
         }
-        showMenu();
+        if (m_mobile) showMobileTasks(); else showMenu();
     }
 
     private Optional<WorkItem> findTask(long taskId) {
@@ -100,6 +109,7 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         EwfSession.instance().logout();
         confirmExit(false);
         m_worklistUI = null;
+        m_mobileTasksUI = null;
         m_admin = false;
         showLogon();
     }
@@ -111,6 +121,34 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
         } catch (Throwable t) {
             System.err.println("[OutestUI] confirmexit non impostabile: " + t.getMessage());
         }
+    }
+
+    // ------------------------------------------------------------------ versione mobile
+
+    private MobileTasksUI m_mobileTasksUI;
+
+    private void showMobileTasks() {
+        if (m_mobileTasksUI == null) {
+            m_mobileTasksUI = new MobileTasksUI();
+            m_mobileTasksUI.prepare(new MobileTasksUI.IListener() {
+                @Override public void reactOnOpen(long processId) { showMobileDetail(processId); }
+                @Override public void reactOnLogout() { logout(); }
+                @Override public void reactOnDesktop() {
+                    m_mobile = false;
+                    m_mobileTasksUI = null;
+                    showMenu();
+                }
+            });
+        } else {
+            m_mobileTasksUI.reload();
+        }
+        m_contentUI = m_mobileTasksUI;
+    }
+
+    private void showMobileDetail(long processId) {
+        MobileTaskUI ui = new MobileTaskUI();
+        ui.prepare(processId, this::showMobileTasks);
+        m_contentUI = ui;
     }
 
     // ------------------------------------------------------------------ lista e dettaglio
@@ -183,7 +221,8 @@ public class OutestUI extends WorkpageDispatchedPageBean implements Serializable
      * logon e nel menu (che saluta gia' l'utente). Lo stesso nome va nel titolo della scheda del browser.
      */
     public boolean isUserBarVisible() {
-        return EwfSession.instance().loggedIn() && !(m_contentUI instanceof MenuUI) && !(m_contentUI instanceof LogonUI);
+        return EwfSession.instance().loggedIn() && !(m_contentUI instanceof MenuUI) && !(m_contentUI instanceof LogonUI)
+                && !(m_contentUI instanceof MobileTasksUI) && !(m_contentUI instanceof MobileTaskUI);
     }
 
     public String getUserBar() {

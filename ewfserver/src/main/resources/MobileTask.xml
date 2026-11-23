@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="mt_0" beanbinding="#{d.MobileTaskUI}" >
+<t:filedownload id="mt_dl" trigger="#{d.MobileTaskUI.downloadTrigger}" url="#{d.MobileTaskUI.downloadUrl}" />
+</t:beanprocessing>
+
+<!-- ===== Testata ===== -->
+<t:row id="mt_h" >
+<t:pane id="mt_hp" background="#1F3445" padding="12" rowdistance="3" width="100%" >
+<t:row id="mt_h0" rendered="#{d.MobileTaskUI.detailMode}" >
+<t:pane id="mt_h0p" actionListener="#{d.MobileTaskUI.onBack}" invokeevent="leftclick" padding="6" >
+<t:row id="mt_h0r" >
+<t:label foreground="#FFFFFF" id="mt_h0l" font="size:15;color:#FFFFFF" text="&#8249; Attivita'" />
+</t:row>
+</t:pane>
+</t:row>
+<t:row id="mt_h0b" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:pane id="mt_h0bp" actionListener="#{d.MobileTaskUI.onCancelAction}" invokeevent="leftclick" padding="6" >
+<t:row id="mt_h0br" >
+<t:label foreground="#FFFFFF" id="mt_h0bl" font="size:15;color:#FFFFFF" text="&#8249; Dettaglio" />
+</t:row>
+</t:pane>
+</t:row>
+<t:row id="mt_h1" rendered="#{d.MobileTaskUI.detailMode}" >
+<t:label foreground="#FFFFFF" id="mt_h1l" font="size:13;color:#FFFFFF" text="#{d.MobileTaskUI.kicker}" width="100%" />
+</t:row>
+<t:row id="mt_h2" rendered="#{d.MobileTaskUI.detailMode}" >
+<t:label foreground="#FFFFFF" id="mt_h2l" font="size:22;weight:bold;color:#FFFFFF" text="#{d.MobileTaskUI.title}" />
+</t:row>
+<t:row id="mt_h3" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:label foreground="#FFFFFF" id="mt_h3l" font="size:13;color:#FFFFFF" text="#{d.MobileTaskUI.actionSubtitle}" />
+</t:row>
+<t:row id="mt_h4" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:label foreground="#FFFFFF" id="mt_h4l" font="size:22;weight:bold;color:#FFFFFF" text="#{d.MobileTaskUI.actionTitle}" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:rowbodypane id="mt_b" background="#F4F6F8" padding="12" rowdistance="10" >
+
+<t:row id="mt_x" rendered="#{d.MobileTaskUI.forWhomVisible}" >
+<t:label foreground="#5D4E00" id="mt_xl" background="#FFF59D" font="size:13;weight:bold;color:#5D4E00" text="#{d.MobileTaskUI.forWhom}" />
+</t:row>
+
+<!-- ===== DETTAGLIO: dati ===== -->
+<t:row id="mt_f" rendered="#{d.MobileTaskUI.detailMode}" >
+<t:pane id="mt_fp" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="2" width="100%" >
+<t:repeat id="mt_fr" listbinding="#{d.MobileTaskUI.visibleFields}" >
+<t:row id="mt_f1" >
+<t:label foreground="#546E7A" id="mt_f1l" font="size:12;color:#546E7A" text=".{label}" />
+</t:row>
+<t:row id="mt_f2" >
+<t:label foreground="#1F2A33" id="mt_f2l" font="size:16;weight:bold;color:#1F2A33" text=".{value}" width="100%" />
+</t:row>
+<t:rowdistance id="mt_f3" height="6" />
+</t:repeat>
+<t:row id="mt_ft" rendered="#{d.MobileTaskUI.fieldsToggle}" >
+<t:pane id="mt_ftp" actionListener="#{d.MobileTaskUI.onToggleFields}" invokeevent="leftclick" padding="6" >
+<t:row id="mt_ftr" >
+<t:label foreground="#1565C0" id="mt_ftl" font="size:14;color:#1565C0" text="#{d.MobileTaskUI.fieldsToggleText}" />
+</t:row>
+</t:pane>
+</t:row>
+</t:pane>
+</t:row>
+
+<!-- ===== DETTAGLIO: percorso ===== -->
+<t:row id="mt_p" rendered="#{d.MobileTaskUI.detailMode}" >
+<t:pane id="mt_pp" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="8" width="100%" >
+<t:row id="mt_pt" >
+<t:label foreground="#1F2A33" id="mt_ptl" font="size:15;weight:bold;color:#1F2A33" text="Percorso" />
+</t:row>
+<t:repeat id="mt_pr" listbinding="#{d.MobileTaskUI.path}" >
+<t:row id="mt_p1" coldistance="10" >
+<t:label id="mt_p1m" align="center" background=".{markerBg}" font=".{markerFont}" foreground=".{markerColor}" text=".{marker}" width="26" />
+<t:label id="mt_p1t" font=".{textFont}" text=".{text}" width="100%" />
+</t:row>
+</t:repeat>
+</t:pane>
+</t:row>
+
+<!-- ===== DETTAGLIO: allegati, commenti, scheda ===== -->
+<t:row id="mt_s" coldistance="8" rendered="#{d.MobileTaskUI.detailMode}" >
+<t:pane id="mt_s1" actionListener="#{d.MobileTaskUI.onToggleAttachments}" background="#{d.MobileTaskUI.attachmentsBg}" border="#DDE3E8" invokeevent="leftclick" padding="13" width="50%" >
+<t:row id="mt_s1r" >
+<t:coldistance id="mt_s1a" width="50%" />
+<t:label foreground="#1F2A33" id="mt_s1l" font="size:15;color:#1F2A33" text="#{d.MobileTaskUI.attachmentsText}" />
+<t:coldistance id="mt_s1b" width="50%" />
+</t:row>
+</t:pane>
+<t:pane id="mt_s2" actionListener="#{d.MobileTaskUI.onToggleComments}" background="#{d.MobileTaskUI.commentsBg}" border="#DDE3E8" invokeevent="leftclick" padding="13" width="50%" >
+<t:row id="mt_s2r" >
+<t:coldistance id="mt_s2a" width="50%" />
+<t:label foreground="#1F2A33" id="mt_s2l" font="size:15;color:#1F2A33" text="#{d.MobileTaskUI.commentsText}" />
+<t:coldistance id="mt_s2b" width="50%" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:row id="mt_a" rendered="#{d.MobileTaskUI.attachmentsOpen}" >
+<t:pane id="mt_ap" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="6" width="100%" >
+<t:row id="mt_am" rendered="#{d.MobileTaskUI.attachmentsMessageVisible}" >
+<t:label foreground="#8E1B1B" id="mt_aml" font="size:14;color:#8E1B1B" text="#{d.MobileTaskUI.attachmentsMessage}" width="100%" />
+</t:row>
+<t:repeat id="mt_ar" listbinding="#{d.MobileTaskUI.attachments}" >
+<t:row id="mt_a1" >
+<t:pane id="mt_a1p" actionListener=".{onDownload}" border="#EEF1F4" invokeevent="leftclick" padding="10" width="100%" >
+<t:row id="mt_a1r" >
+<t:label foreground="#1565C0" id="mt_a1n" font="size:15;color:#1565C0" text=".{name}" width="100%" />
+</t:row>
+<t:row id="mt_a1s" >
+<t:label foreground="#546E7A" id="mt_a1i" font="size:12;color:#546E7A" text=".{info}" />
+</t:row>
+</t:pane>
+</t:row>
+</t:repeat>
+<t:row id="mt_au" rendered="#{d.MobileTaskUI.uploadAllowed}" >
+<t:fileuploadbutton id="mt_aub" actionListener="#{d.MobileTaskUI.onUpload}" maxfilesize="20000000" multiselect="true" text="Aggiungi file o foto..." width="100%" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:row id="mt_c" rendered="#{d.MobileTaskUI.commentsOpen}" >
+<t:pane id="mt_cp" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="4" width="100%" >
+<t:row id="mt_c0" rendered="#{d.MobileTaskUI.noComments}" >
+<t:label foreground="#546E7A" id="mt_c0l" font="size:14;color:#546E7A" text="Nessun commento." />
+</t:row>
+<t:repeat id="mt_cr" listbinding="#{d.MobileTaskUI.comments}" >
+<t:row id="mt_c1" >
+<t:label foreground="#546E7A" id="mt_c1l" font="size:12;color:#546E7A" text=".{head}" />
+</t:row>
+<t:row id="mt_c2" >
+<t:textpane id="mt_c2t" font="size:14" text=".{text}" width="100%" />
+</t:row>
+<t:rowdistance id="mt_c3" height="6" />
+</t:repeat>
+<t:row id="mt_cn" >
+<t:textarea id="mt_cna" font="size:15" height="70" text="#{d.MobileTaskUI.newComment}" width="100%" />
+</t:row>
+<t:row id="mt_cb" >
+<t:pane id="mt_cbp" actionListener="#{d.MobileTaskUI.onAddComment}" border="#1565C0" invokeevent="leftclick" padding="11" width="100%" >
+<t:row id="mt_cbr" >
+<t:coldistance id="mt_cb1" width="50%" />
+<t:label foreground="#1565C0" id="mt_cbl" font="size:15;weight:bold;color:#1565C0" text="Aggiungi commento" />
+<t:coldistance id="mt_cb2" width="50%" />
+</t:row>
+</t:pane>
+</t:row>
+</t:pane>
+</t:row>
+
+<t:row id="mt_sh" rendered="#{d.MobileTaskUI.hasSheet}" >
+<t:pane id="mt_shp" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="4" width="100%" >
+<t:repeat id="mt_shr" listbinding="#{d.MobileTaskUI.sheets}" >
+<t:row id="mt_sh1" >
+<t:pane id="mt_sh1p" actionListener=".{onOpen}" invokeevent="leftclick" padding="8" width="100%" >
+<t:row id="mt_sh1r" >
+<t:label foreground="#1565C0" id="mt_sh1l" font="size:15;color:#1565C0" text=".{label}" width="100%" />
+</t:row>
+</t:pane>
+</t:row>
+</t:repeat>
+</t:pane>
+</t:row>
+
+<!-- ===== AZIONE: opzioni del nodo di scelta ===== -->
+<t:row id="mt_o" rendered="#{d.MobileTaskUI.choosing}" >
+<t:pane id="mt_op" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="8" width="100%" >
+<t:repeat id="mt_or" listbinding="#{d.MobileTaskUI.options}" >
+<t:row id="mt_o1" >
+<t:pane id="mt_o1p" actionListener=".{onPick}" background=".{bg}" border=".{border}" invokeevent="leftclick" padding="13" width="100%" >
+<t:row id="mt_o1r" coldistance="12" >
+<t:label foreground="#1565C0" id="mt_o1m" font="size:18;color:#1565C0" text=".{mark}" />
+<t:label foreground="#1F2A33" id="mt_o1l" font="size:16;color:#1F2A33" text=".{label}" width="100%" />
+</t:row>
+</t:pane>
+</t:row>
+</t:repeat>
+</t:pane>
+</t:row>
+
+<!-- ===== AZIONE: commento e avviso ===== -->
+<t:row id="mt_n0" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:label foreground="#1F2A33" id="mt_n0l" font="size:14;weight:bold;color:#1F2A33" text="#{d.MobileTaskUI.noteHint}" />
+</t:row>
+<t:row id="mt_n" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:textarea id="mt_na" font="size:16" height="120" text="#{d.MobileTaskUI.note}" width="100%" />
+</t:row>
+<t:row id="mt_i" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:pane id="mt_ip" background="#E3F0FB" padding="12" width="100%" >
+<t:row id="mt_ir" >
+<t:textpane id="mt_it" font="size:14" foreground="#0D3C61" text="Prima di registrare l'azione eWF esegue i controlli previsti dal processo (es. OdA non aperto in modifica in SAP): se non passano, l'attivita' resta a te e compare il motivo." width="100%" />
+</t:row>
+</t:pane>
+</t:row>
+
+</t:rowbodypane>
+
+<!-- ===== Piede: pulsanti ===== -->
+<t:row id="mt_z" >
+<t:pane id="mt_zp" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="8" width="100%" >
+
+<t:row id="mt_z1" coldistance="10" rendered="#{d.MobileTaskUI.plainDecision}" >
+<t:pane id="mt_z1a" actionListener="#{d.MobileTaskUI.onStartReject}" background="#FFFFFF" border="#B71C1C" invokeevent="leftclick" padding="15" width="50%" >
+<t:row id="mt_z1ar" >
+<t:coldistance id="mt_z1a1" width="50%" />
+<t:label foreground="#B71C1C" id="mt_z1al" font="size:17;weight:bold;color:#B71C1C" text="Respingi" />
+<t:coldistance id="mt_z1a2" width="50%" />
+</t:row>
+</t:pane>
+<t:pane id="mt_z1b" actionListener="#{d.MobileTaskUI.onStartApprove}" background="#1565C0" border="#1565C0" invokeevent="leftclick" padding="15" width="50%" >
+<t:row id="mt_z1br" >
+<t:coldistance id="mt_z1b1" width="50%" />
+<t:label foreground="#FFFFFF" id="mt_z1bl" font="size:17;weight:bold;color:#FFFFFF" text="Approva" />
+<t:coldistance id="mt_z1b2" width="50%" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:row id="mt_z2" rendered="#{d.MobileTaskUI.hasOptions}" >
+<t:pane id="mt_z2a" actionListener="#{d.MobileTaskUI.onStartChoose}" background="#1565C0" border="#1565C0" invokeevent="leftclick" padding="15" width="100%" >
+<t:row id="mt_z2ar" >
+<t:coldistance id="mt_z2a1" width="50%" />
+<t:label foreground="#FFFFFF" id="mt_z2al" font="size:17;weight:bold;color:#FFFFFF" text="Scegli come proseguire" />
+<t:coldistance id="mt_z2a2" width="50%" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:row id="mt_z3" rendered="#{d.MobileTaskUI.sapGuiOnly}" >
+<t:label foreground="#546E7A" id="mt_z3l" font="size:14;color:#546E7A" text="Questa attivita' si completa in SAP GUI." />
+</t:row>
+<t:row id="mt_z4" rendered="#{d.MobileTaskUI.noTask}" >
+<t:label foreground="#546E7A" id="mt_z4l" font="size:14;color:#546E7A" text="Nessuna azione da fare su questo processo." />
+</t:row>
+
+<t:row id="mt_z5" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:pane id="mt_z5a" actionListener="#{d.MobileTaskUI.onConfirm}" background="#{d.MobileTaskUI.confirmBg}" border="#{d.MobileTaskUI.confirmBg}" invokeevent="leftclick" padding="15" width="100%" >
+<t:row id="mt_z5ar" >
+<t:coldistance id="mt_z5a1" width="50%" />
+<t:label foreground="#FFFFFF" id="mt_z5al" font="size:17;weight:bold;color:#FFFFFF" text="#{d.MobileTaskUI.confirmText}" />
+<t:coldistance id="mt_z5a2" width="50%" />
+</t:row>
+</t:pane>
+</t:row>
+<t:row id="mt_z6" rendered="#{d.MobileTaskUI.actionMode}" >
+<t:pane id="mt_z6a" actionListener="#{d.MobileTaskUI.onCancelAction}" invokeevent="leftclick" padding="10" width="100%" >
+<t:row id="mt_z6ar" >
+<t:coldistance id="mt_z6a1" width="50%" />
+<t:label foreground="#1565C0" id="mt_z6al" font="size:16;color:#1565C0" text="Annulla" />
+<t:coldistance id="mt_z6a2" width="50%" />
+</t:row>
+</t:pane>
+</t:row>
+
+</t:pane>
+</t:row>
+
+</t:layoutdefinition>

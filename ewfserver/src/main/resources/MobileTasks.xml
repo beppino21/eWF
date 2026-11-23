@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<t:layoutdefinition xmlns:t="http://www.captaincasa.com/controllibrary/t" >
+
+<t:beanprocessing id="ml_0" beanbinding="#{d.MobileTasksUI}" />
+
+<!-- ===== Testata: utente e uscita ===== -->
+<t:row id="ml_h" >
+<t:pane id="ml_hp" background="#1F3445" padding="12" width="100%" >
+<t:row id="ml_h1" >
+<t:label foreground="#FFFFFF" id="ml_h1a" font="size:20;weight:bold;color:#FFFFFF" text="eWF" />
+<t:coldistance id="ml_h1b" width="100%" />
+<t:pane id="ml_h1c" actionListener="#{d.MobileTasksUI.onLogout}" border="#FFFFFF80" invokeevent="leftclick" padding="8" >
+<t:row id="ml_h1c_r" >
+<t:label foreground="#FFFFFF" id="ml_h1c_l" font="size:14;color:#FFFFFF" text="Esci" />
+</t:row>
+</t:pane>
+</t:row>
+<t:rowdistance id="ml_h2d" height="2" />
+<t:row id="ml_h2" >
+<t:label foreground="#FFFFFF" id="ml_h2a" font="size:13;color:#FFFFFF" text="#{d.MobileTasksUI.userName}" width="100%" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:rowbodypane id="ml_b" background="#F4F6F8" padding="12" rowdistance="10" >
+
+<t:row id="ml_t" >
+<t:label foreground="#1F2A33" id="ml_ta" font="size:22;weight:bold;color:#1F2A33" text="Le mie attivita'" />
+<t:coldistance id="ml_tb" width="100%" />
+<t:label foreground="#546E7A" id="ml_tc" font="size:14;color:#546E7A" text="#{d.MobileTasksUI.countText}" />
+</t:row>
+
+<!-- ===== Filtri ===== -->
+<t:row id="ml_f" coldistance="8" >
+<t:pane id="ml_f1" actionListener="#{d.MobileTasksUI.onFilterAll}" background="#{d.MobileTasksUI.allBg}" border="#1565C0" invokeevent="leftclick" padding="9" >
+<t:row id="ml_f1r" >
+<t:label id="ml_f1l" font="#{d.MobileTasksUI.allFg}" foreground="#{d.MobileTasksUI.allColor}" text="#{d.MobileTasksUI.allText}" />
+</t:row>
+</t:pane>
+<t:pane id="ml_f2" actionListener="#{d.MobileTasksUI.onFilterLate}" background="#{d.MobileTasksUI.lateBg}" border="#1565C0" invokeevent="leftclick" padding="9" >
+<t:row id="ml_f2r" >
+<t:label id="ml_f2l" font="#{d.MobileTasksUI.lateFg}" foreground="#{d.MobileTasksUI.lateColor}" text="#{d.MobileTasksUI.lateText}" />
+</t:row>
+</t:pane>
+<t:pane id="ml_f3" actionListener="#{d.MobileTasksUI.onFilterOthers}" background="#{d.MobileTasksUI.othersBg}" border="#1565C0" invokeevent="leftclick" padding="9" >
+<t:row id="ml_f3r" >
+<t:label id="ml_f3l" font="#{d.MobileTasksUI.othersFg}" foreground="#{d.MobileTasksUI.othersColor}" text="#{d.MobileTasksUI.othersText}" />
+</t:row>
+</t:pane>
+</t:row>
+
+<t:row id="ml_e" rendered="#{d.MobileTasksUI.empty}" >
+<t:label foreground="#546E7A" id="ml_el" font="size:15;color:#546E7A" text="#{d.MobileTasksUI.emptyText}" />
+</t:row>
+
+<!-- ===== Una card per attivita' ===== -->
+<t:repeat id="ml_r" listbinding="#{d.MobileTasksUI.cards}" >
+<t:row id="ml_c" >
+<t:pane id="ml_cp" actionListener=".{onOpen}" background="#FFFFFF" border="#DDE3E8" invokeevent="leftclick" padding="12" rowdistance="5" width="100%" >
+<t:row id="ml_c1" >
+<t:label foreground="#546E7A" id="ml_c1a" font="size:13;color:#546E7A" text=".{process}" />
+<t:coldistance id="ml_c1b" width="100%" />
+<t:label id="ml_c1c" background=".{badgeBg}" font=".{badgeFont}" foreground=".{badgeColor}" text=".{badge}" />
+</t:row>
+<t:row id="ml_c2" >
+<t:label foreground="#1F2A33" id="ml_c2a" font="size:18;weight:bold;color:#1F2A33" text=".{document}" />
+<t:coldistance id="ml_c2b" width="100%" />
+<t:label foreground="#1F2A33" id="ml_c2c" font="size:17;weight:bold;color:#1F2A33" text=".{value}" />
+</t:row>
+<t:row id="ml_c3" >
+<t:label foreground="#1F2A33" id="ml_c3a" font="size:15;color:#1F2A33" text=".{summary}" width="100%" />
+</t:row>
+<t:row id="ml_c4" >
+<t:label foreground="#546E7A" id="ml_c4a" font="size:13;color:#546E7A" text=".{task}" />
+<t:coldistance id="ml_c4b" width="100%" />
+<t:label foreground="#546E7A" id="ml_c4c" font="size:13;color:#546E7A" text=".{forWhom}" />
+<t:coldistance id="ml_c4d" width="8" />
+<t:label foreground="#546E7A" id="ml_c4e" font="size:13;color:#546E7A" text=".{attachments}" />
+</t:row>
+</t:pane>
+</t:row>
+</t:repeat>
+
+<t:rowdistance id="ml_v_d" height="6" />
+<t:row id="ml_v" >
+<t:coldistance id="ml_va" width="100%" />
+<t:link id="ml_vb" actionListener="#{d.MobileTasksUI.onDesktop}" font="size:13" text="Versione completa" />
+<t:coldistance id="ml_vc" width="100%" />
+</t:row>
+
+</t:rowbodypane>
+
+<!-- ===== Piede: aggiornamento ===== -->
+<t:row id="ml_p" >
+<t:pane id="ml_pp" background="#FFFFFF" border="#DDE3E8" padding="10" width="100%" >
+<t:row id="ml_pr" >
+<t:label foreground="#546E7A" id="ml_pa" font="size:13;color:#546E7A" text="#{d.MobileTasksUI.updatedAt}" />
+<t:coldistance id="ml_pb" width="100%" />
+<t:pane id="ml_pc" actionListener="#{d.MobileTasksUI.onRefresh}" border="#1565C0" invokeevent="leftclick" padding="11" >
+<t:row id="ml_pcr" >
+<t:label foreground="#1565C0" id="ml_pcl" font="size:15;weight:bold;color:#1565C0" text="Aggiorna" />
+</t:row>
+</t:pane>
+</t:row>
+</t:pane>
+</t:row>
+
+</t:layoutdefinition>

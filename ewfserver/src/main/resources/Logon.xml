@@ -3,12 +3,12 @@
 
 <t:beanprocessing id="g_1" beanbinding="#{d.LogonUI}" />
 <t:row id="g_2" >
-<t:pane id="g_img" height="100%" width="50%" >
+<t:pane id="g_img" height="100%" rendered="#{d.LogonUI.desktop}" width="50%" >
 <t:row id="g_img_r" >
 <t:image id="g_img_i" height="100%" image="#{d.LogonUI.backgroundImage}" keepratiofitmode="contain" width="100%" />
 </t:row>
 </t:pane>
-<t:pane id="g_rp" height="100%" width="50%" >
+<t:pane id="g_rp" height="100%" width="#{d.LogonUI.formWidth}" >
 <t:rowdistance id="g_top" height="100%" />
 <t:row id="g_r" >
 <t:coldistance id="g_l" width="100%" />

@@ -66,7 +66,11 @@ public class ErrorsUI extends PageBean implements Serializable {
             for (ProcessError e : svc().processesInError(me())) {
                 Item i = new Item(e);
                 m_grid.getItems().add(i);
-                if (keep != null && keep == e.processId()) select(i);
+                if (keep != null && keep == e.processId()) {
+                    // selectItem richiama onRowSelect: m_selected impostato prima, cosi' la nota resta
+                    m_selected = e;
+                    m_grid.selectItem(i);
+                }
             }
             int n = m_grid.getItems().size();
             m_status = n == 0 ? "Nessun processo in errore" : n + (n == 1 ? " processo in errore" : " processi in errore");
@@ -77,8 +81,11 @@ public class ErrorsUI extends PageBean implements Serializable {
         }
     }
 
+    /**
+     * Chiamato da onRowSelect. NON chiamare qui m_grid.selectItem: in CaptainCasa selectItem richiama
+     * onRowSelect della riga, e si entrerebbe in ricorsione infinita (StackOverflowError, errore 500).
+     */
     private void select(Item i) {
-        m_grid.selectItem(i);
         if (m_selected == null || m_selected.processId() != i.e.processId()) m_note = null;
         m_selected = i.e;
     }
