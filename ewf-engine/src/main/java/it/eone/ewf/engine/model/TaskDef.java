@@ -19,7 +19,9 @@ public record TaskDef(
         String taskParam,
         List<HookDef> hooks,
         List<OptionDef> options,
-        NotifyMode notifyMode) {
+        NotifyMode notifyMode,
+        CommentRule commentOnApprove,
+        CommentRule commentOnReject) {
 
     public TaskDef {
         hooks = hooks == null ? List.of() : List.copyOf(hooks);
@@ -28,6 +30,17 @@ public record TaskDef(
         if (previewMode == null) previewMode = PreviewMode.NAME;
         if (interaction == null) interaction = Interaction.WEB;
         if (notifyMode == null) notifyMode = NotifyMode.NONE;
+        if (commentOnApprove == null) commentOnApprove = CommentRule.DEFAULT_APPROVE;
+        if (commentOnReject == null) commentOnReject = CommentRule.DEFAULT_REJECT;
+    }
+
+    /** Task con avviso, commenti predefiniti (approvazione facoltativa, rifiuto obbligatorio). */
+    public TaskDef(long id, int subopNo, String text, String roleCode, int requiredWeight, AssigneeMode assigneeMode,
+                   String assigneeHandlerCode, boolean teamTask, String teamCode, PreviewMode previewMode,
+                   Interaction interaction, String taskParam, List<HookDef> hooks, List<OptionDef> options,
+                   NotifyMode notifyMode) {
+        this(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask, teamCode,
+                previewMode, interaction, taskParam, hooks, options, notifyMode, null, null);
     }
 
     /** Task con opzioni, senza avviso immediato. */
@@ -55,13 +68,21 @@ public record TaskDef(
 
     public TaskDef withOptions(List<OptionDef> opts) {
         return new TaskDef(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask,
-                teamCode, previewMode, interaction, taskParam, hooks, opts, notifyMode);
+                teamCode, previewMode, interaction, taskParam, hooks, opts, notifyMode, commentOnApprove, commentOnReject);
     }
 
     public TaskDef withNotify(NotifyMode mode) {
         return new TaskDef(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask,
-                teamCode, previewMode, interaction, taskParam, hooks, options, mode);
+                teamCode, previewMode, interaction, taskParam, hooks, options, mode, commentOnApprove, commentOnReject);
     }
+
+    public TaskDef withComments(CommentRule onApprove, CommentRule onReject) {
+        return new TaskDef(id, subopNo, text, roleCode, requiredWeight, assigneeMode, assigneeHandlerCode, teamTask,
+                teamCode, previewMode, interaction, taskParam, hooks, options, notifyMode, onApprove, onReject);
+    }
+
+    /** Regola del commento per l'azione: approvazione (o opzione che prosegue) / rifiuto (o opzione che respinge). */
+    public CommentRule commentFor(boolean reject) { return reject ? commentOnReject : commentOnApprove; }
 
     public List<HookDef> hooks(HookEvent event) {
         return hooks.stream().filter(h -> h.event() == event)

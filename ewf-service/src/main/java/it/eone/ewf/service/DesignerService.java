@@ -175,7 +175,8 @@ public final class DesignerService {
     /** Un task della bozza. hooks/options/functions: quanti agganci, opzioni e funzioni speciali ha. */
     public record TaskRow(long id, long stepId, int subopNo, String text, String assigneeMode, String roleCode,
                           String handlerCode, boolean teamTask, String teamCode, int requiredWeight, String previewMode,
-                          String interaction, String notifyMode, String taskParam, int hooks, int options, int functions) {}
+                          String interaction, String notifyMode, String taskParam, int hooks, int options, int functions,
+                          String commentOnApprove, String commentOnReject) {}
 
     /** Dati di uno step da salvare; stepId null = nuovo. nextOk/nextKo null = fine. */
     public record StepEdit(Long stepId, int stepNo, String option, boolean first, String join, Integer nextOk,
@@ -184,7 +185,7 @@ public final class DesignerService {
     /** Dati di un task da salvare; taskId null = nuovo (nello step stepId). */
     public record TaskEdit(Long taskId, long stepId, String text, String assigneeMode, String roleCode, String handlerCode,
                            boolean teamTask, String teamCode, int requiredWeight, String previewMode, String interaction,
-                           String notifyMode, String taskParam) {}
+                           String notifyMode, String taskParam, String commentOnApprove, String commentOnReject) {}
 
     /** Azione di fine processo e nota della versione. */
     public record VersionEdit(String endHandlerCode, String endHandlerConfig, String note) {}
@@ -357,9 +358,10 @@ public final class DesignerService {
             if (e.taskId() == null) {
                 try (PreparedStatement ps = c.prepareStatement("""
                         INSERT INTO ewf_core.task_def(step_id, subop_no, text, role_code, required_weight, assignee_mode,
-                               assignee_handler_id, team_task, team_code, preview_mode, interaction, notify, task_param)
+                               assignee_handler_id, team_task, team_code, preview_mode, interaction, notify, task_param,
+                               comment_on_approve, comment_on_reject)
                         VALUES (?, (SELECT coalesce(max(subop_no), -1) + 1 FROM ewf_core.task_def WHERE step_id = ?),
-                                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""")) {
+                                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""")) {
                     ps.setLong(1, e.stepId());
                     ps.setLong(2, e.stepId());
                     fillTask(ps, 3, e, mode, role, team, handlerId);
@@ -372,11 +374,11 @@ public final class DesignerService {
             try (PreparedStatement ps = c.prepareStatement("""
                     UPDATE ewf_core.task_def SET text = ?, role_code = ?, required_weight = ?, assignee_mode = ?,
                            assignee_handler_id = ?, team_task = ?, team_code = ?, preview_mode = ?, interaction = ?,
-                           notify = ?, task_param = ?
+                           notify = ?, task_param = ?, comment_on_approve = ?, comment_on_reject = ?
                      WHERE id = ? AND step_id = ?""")) {
                 fillTask(ps, 1, e, mode, role, team, handlerId);
-                ps.setLong(12, e.taskId());
-                ps.setLong(13, e.stepId());
+                ps.setLong(14, e.taskId());
+                ps.setLong(15, e.stepId());
                 if (ps.executeUpdate() == 0) throw new ServiceException(Code.NOT_FOUND, "Task non trovato nello step");
             }
             return e.taskId();
@@ -479,7 +481,8 @@ public final class DesignerService {
                        d.required_weight, d.preview_mode, d.interaction, d.notify, d.task_param,
                        (SELECT count(*) FROM ewf_core.task_hook x WHERE x.task_def_id = d.id),
                        (SELECT count(*) FROM ewf_core.task_option x WHERE x.task_def_id = d.id),
-                       (SELECT count(*) FROM ewf_core.task_function x WHERE x.task_def_id = d.id)
+                       (SELECT count(*) FROM ewf_core.task_function x WHERE x.task_def_id = d.id),
+                       d.comment_on_approve, d.comment_on_reject
                   FROM ewf_core.task_def d
                   JOIN ewf_core.step_def s ON s.id = d.step_id
                   LEFT JOIN ewf_core.handler h ON h.id = d.assignee_handler_id
@@ -490,7 +493,8 @@ public final class DesignerService {
                     tasks.computeIfAbsent(rs.getLong(2), k -> new ArrayList<>()).add(new TaskRow(rs.getLong(1), rs.getLong(2),
                             rs.getInt(3), rs.getString(4), rs.getString(5), rs.getString(6), rs.getString(7),
                             rs.getBoolean(8), rs.getString(9), rs.getInt(10), rs.getString(11), rs.getString(12),
-                            rs.getString(13), rs.getString(14), rs.getInt(15), rs.getInt(16), rs.getInt(17)));
+                            rs.getString(13), rs.getString(14), rs.getInt(15), rs.getInt(16), rs.getInt(17),
+                            rs.getString(18), rs.getString(19)));
             }
         }
         List<StepRow> out = new ArrayList<>();
@@ -536,6 +540,8 @@ public final class DesignerService {
         ps.setString(i + 8, oneOf(e.interaction(), "WEB", "WEB", "INTERACTIVE", "SAPGUI_ONLY"));
         ps.setString(i + 9, oneOf(e.notifyMode(), "NONE", "NONE", "IMMEDIATE"));
         ps.setString(i + 10, trimToNull(e.taskParam()));
+        ps.setString(i + 11, oneOf(e.commentOnApprove(), "OPTIONAL", "NONE", "OPTIONAL", "REQUIRED"));
+        ps.setString(i + 12, oneOf(e.commentOnReject(), "REQUIRED", "NONE", "OPTIONAL", "REQUIRED"));
     }
 
     private void requireDraft(Connection c, long versionId) throws SQLException {

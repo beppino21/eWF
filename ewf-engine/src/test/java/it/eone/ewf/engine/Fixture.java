@@ -158,7 +158,11 @@ final class Fixture {
     }
 
     Requests.Outcome choose(long taskId, long actor, String option) {
-        return engine.choose(new Requests.Choose(taskId, actor, option, null, null));
+        return choose(taskId, actor, option, null);
+    }
+
+    Requests.Outcome choose(long taskId, long actor, String option, String note) {
+        return engine.choose(new Requests.Choose(taskId, actor, option, note, null));
     }
 
     static final String AVVIO = "AVVIO_ODA";

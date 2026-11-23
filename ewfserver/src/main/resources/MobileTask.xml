@@ -23,7 +23,7 @@
 </t:pane>
 </t:row>
 <t:row id="mt_h1" rendered="#{d.MobileTaskUI.detailMode}" >
-<t:label foreground="#FFFFFF" id="mt_h1l" font="size:13;color:#FFFFFF" text="#{d.MobileTaskUI.kicker}" width="100%" />
+<t:textpane foreground="#FFFFFF" id="mt_h1l" font="size:13" text="#{d.MobileTaskUI.kicker}" width="100%" />
 </t:row>
 <t:row id="mt_h2" rendered="#{d.MobileTaskUI.detailMode}" >
 <t:label foreground="#FFFFFF" id="mt_h2l" font="size:22;weight:bold;color:#FFFFFF" text="#{d.MobileTaskUI.title}" />
@@ -51,7 +51,7 @@
 <t:label foreground="#546E7A" id="mt_f1l" font="size:12;color:#546E7A" text=".{label}" />
 </t:row>
 <t:row id="mt_f2" >
-<t:label foreground="#1F2A33" id="mt_f2l" font="size:16;weight:bold;color:#1F2A33" text=".{value}" width="100%" />
+<t:textpane foreground="#1F2A33" id="mt_f2l" font="size:16;weight:bold" text=".{value}" width="100%" />
 </t:row>
 <t:rowdistance id="mt_f3" height="6" />
 </t:repeat>
@@ -74,7 +74,7 @@
 <t:repeat id="mt_pr" listbinding="#{d.MobileTaskUI.path}" >
 <t:row id="mt_p1" coldistance="10" >
 <t:label id="mt_p1m" align="center" background=".{markerBg}" font=".{markerFont}" foreground=".{markerColor}" text=".{marker}" width="26" />
-<t:label id="mt_p1t" font=".{textFont}" text=".{text}" width="100%" />
+<t:textpane id="mt_p1t" font=".{textFont}" foreground=".{textColor}" text=".{text}" width="100%" />
 </t:row>
 </t:repeat>
 </t:pane>
@@ -101,13 +101,13 @@
 <t:row id="mt_a" rendered="#{d.MobileTaskUI.attachmentsOpen}" >
 <t:pane id="mt_ap" background="#FFFFFF" border="#DDE3E8" padding="12" rowdistance="6" width="100%" >
 <t:row id="mt_am" rendered="#{d.MobileTaskUI.attachmentsMessageVisible}" >
-<t:label foreground="#8E1B1B" id="mt_aml" font="size:14;color:#8E1B1B" text="#{d.MobileTaskUI.attachmentsMessage}" width="100%" />
+<t:textpane foreground="#8E1B1B" id="mt_aml" font="size:14" text="#{d.MobileTaskUI.attachmentsMessage}" width="100%" />
 </t:row>
 <t:repeat id="mt_ar" listbinding="#{d.MobileTaskUI.attachments}" >
 <t:row id="mt_a1" >
 <t:pane id="mt_a1p" actionListener=".{onDownload}" border="#EEF1F4" invokeevent="leftclick" padding="10" width="100%" >
 <t:row id="mt_a1r" >
-<t:label foreground="#1565C0" id="mt_a1n" font="size:15;color:#1565C0" text=".{name}" width="100%" />
+<t:textpane foreground="#1565C0" id="mt_a1n" font="size:15" text=".{name}" width="100%" />
 </t:row>
 <t:row id="mt_a1s" >
 <t:label foreground="#546E7A" id="mt_a1i" font="size:12;color:#546E7A" text=".{info}" />
@@ -156,7 +156,7 @@
 <t:row id="mt_sh1" >
 <t:pane id="mt_sh1p" actionListener=".{onOpen}" invokeevent="leftclick" padding="8" width="100%" >
 <t:row id="mt_sh1r" >
-<t:label foreground="#1565C0" id="mt_sh1l" font="size:15;color:#1565C0" text=".{label}" width="100%" />
+<t:textpane foreground="#1565C0" id="mt_sh1l" font="size:15" text=".{label}" width="100%" />
 </t:row>
 </t:pane>
 </t:row>
@@ -172,7 +172,7 @@
 <t:pane id="mt_o1p" actionListener=".{onPick}" background=".{bg}" border=".{border}" invokeevent="leftclick" padding="13" width="100%" >
 <t:row id="mt_o1r" coldistance="12" >
 <t:label foreground="#1565C0" id="mt_o1m" font="size:18;color:#1565C0" text=".{mark}" />
-<t:label foreground="#1F2A33" id="mt_o1l" font="size:16;color:#1F2A33" text=".{label}" width="100%" />
+<t:textpane foreground="#1F2A33" id="mt_o1l" font="size:16" text=".{label}" width="100%" />
 </t:row>
 </t:pane>
 </t:row>

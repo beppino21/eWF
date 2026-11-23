@@ -531,9 +531,24 @@ abstract class WorkflowEngineContract {
     @Test
     void rifiutoComeOpzioneChiudeInNegativo() {
         ProcessInstance p = f.startRami("R-RIF");
-        f.choose(node(p).id, BIANCHI, "RIF");
+        TaskInstance n = node(p);
+        EngineException e = assertThrows(EngineException.class, () -> f.choose(n.id, BIANCHI, "RIF"));
+        assertEquals(Code.BAD_REQUEST, e.code(), "un'opzione che respinge segue la regola del rifiuto: commento obbligatorio");
+        assertEquals(TaskStatus.OPEN, f.openTask(p.id).status, "nessun effetto senza commento");
+        f.choose(n.id, BIANCHI, "RIF", "Fornitore non qualificato");
         assertEquals(ProcessStatus.REJECTED, f.status(p.id));
         assertTrue(f.endParams.isEmpty(), "nessuna azione di fine su un rifiuto");
+    }
+
+    @Test
+    void commentoRichiestoSecondoLaRegolaDelTask() {
+        ProcessInstance p = f.startOda("4500000930", "1000");
+        TaskInstance t = f.openTask(p.id);
+        EngineException e = assertThrows(EngineException.class, () -> f.ko(t.id, ROSSI, "  "));
+        assertEquals(Code.BAD_REQUEST, e.code(), "predefinito: per respingere serve un commento");
+        assertEquals(TaskStatus.OPEN, f.openTask(p.id).status, "nessun effetto");
+        f.ok(t.id, ROSSI);                                        // predefinito: approvazione senza commento
+        assertEquals(TaskStatus.OK, f.store.task(t.id).orElseThrow().status);
     }
 
     @Test
@@ -688,7 +703,7 @@ abstract class WorkflowEngineContract {
     @Test
     void tornareAlDocumentoChiudeInNegativoSenzaFigli() {
         ProcessInstance avvio = f.startAvvio("4500000705", "1000");
-        f.choose(f.openTask(avvio.id).id, ROSSI, "RIV");
+        f.choose(f.openTask(avvio.id).id, ROSSI, "RIV", "Da rivedere");
         assertEquals(ProcessStatus.REJECTED, f.status(avvio.id));
         assertTrue(f.store.links(avvio.id).isEmpty());
     }

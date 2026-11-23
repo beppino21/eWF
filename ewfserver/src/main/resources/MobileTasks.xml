@@ -32,19 +32,25 @@
 
 <!-- ===== Filtri ===== -->
 <t:row id="ml_f" coldistance="8" >
-<t:pane id="ml_f1" actionListener="#{d.MobileTasksUI.onFilterAll}" background="#{d.MobileTasksUI.allBg}" border="#1565C0" invokeevent="leftclick" padding="9" >
+<t:pane id="ml_f1" width="33%" actionListener="#{d.MobileTasksUI.onFilterAll}" background="#{d.MobileTasksUI.allBg}" border="#1565C0" invokeevent="leftclick" padding="8" >
 <t:row id="ml_f1r" >
+<t:coldistance id="ml_f1a" width="50%" />
 <t:label id="ml_f1l" font="#{d.MobileTasksUI.allFg}" foreground="#{d.MobileTasksUI.allColor}" text="#{d.MobileTasksUI.allText}" />
+<t:coldistance id="ml_f1b" width="50%" />
 </t:row>
 </t:pane>
-<t:pane id="ml_f2" actionListener="#{d.MobileTasksUI.onFilterLate}" background="#{d.MobileTasksUI.lateBg}" border="#1565C0" invokeevent="leftclick" padding="9" >
+<t:pane id="ml_f2" width="33%" actionListener="#{d.MobileTasksUI.onFilterLate}" background="#{d.MobileTasksUI.lateBg}" border="#1565C0" invokeevent="leftclick" padding="8" >
 <t:row id="ml_f2r" >
+<t:coldistance id="ml_f2a" width="50%" />
 <t:label id="ml_f2l" font="#{d.MobileTasksUI.lateFg}" foreground="#{d.MobileTasksUI.lateColor}" text="#{d.MobileTasksUI.lateText}" />
+<t:coldistance id="ml_f2b" width="50%" />
 </t:row>
 </t:pane>
-<t:pane id="ml_f3" actionListener="#{d.MobileTasksUI.onFilterOthers}" background="#{d.MobileTasksUI.othersBg}" border="#1565C0" invokeevent="leftclick" padding="9" >
+<t:pane id="ml_f3" width="33%" actionListener="#{d.MobileTasksUI.onFilterOthers}" background="#{d.MobileTasksUI.othersBg}" border="#1565C0" invokeevent="leftclick" padding="8" >
 <t:row id="ml_f3r" >
+<t:coldistance id="ml_f3a" width="50%" />
 <t:label id="ml_f3l" font="#{d.MobileTasksUI.othersFg}" foreground="#{d.MobileTasksUI.othersColor}" text="#{d.MobileTasksUI.othersText}" />
+<t:coldistance id="ml_f3b" width="50%" />
 </t:row>
 </t:pane>
 </t:row>
@@ -58,9 +64,7 @@
 <t:row id="ml_c" >
 <t:pane id="ml_cp" actionListener=".{onOpen}" background="#FFFFFF" border="#DDE3E8" invokeevent="leftclick" padding="12" rowdistance="5" width="100%" >
 <t:row id="ml_c1" >
-<t:label foreground="#546E7A" id="ml_c1a" font="size:13;color:#546E7A" text=".{process}" />
-<t:coldistance id="ml_c1b" width="100%" />
-<t:label id="ml_c1c" background=".{badgeBg}" font=".{badgeFont}" foreground=".{badgeColor}" text=".{badge}" />
+<t:textpane id="ml_c1a" font="size:13" foreground="#546E7A" text=".{process}" width="100%" />
 </t:row>
 <t:row id="ml_c2" >
 <t:label foreground="#1F2A33" id="ml_c2a" font="size:18;weight:bold;color:#1F2A33" text=".{document}" />
@@ -68,14 +72,13 @@
 <t:label foreground="#1F2A33" id="ml_c2c" font="size:17;weight:bold;color:#1F2A33" text=".{value}" />
 </t:row>
 <t:row id="ml_c3" >
-<t:label foreground="#1F2A33" id="ml_c3a" font="size:15;color:#1F2A33" text=".{summary}" width="100%" />
+<t:label id="ml_c3b" background=".{badgeBg}" font=".{badgeFont}" foreground=".{badgeColor}" text=".{badge}" />
 </t:row>
 <t:row id="ml_c4" >
-<t:label foreground="#546E7A" id="ml_c4a" font="size:13;color:#546E7A" text=".{task}" />
-<t:coldistance id="ml_c4b" width="100%" />
-<t:label foreground="#546E7A" id="ml_c4c" font="size:13;color:#546E7A" text=".{forWhom}" />
-<t:coldistance id="ml_c4d" width="8" />
-<t:label foreground="#546E7A" id="ml_c4e" font="size:13;color:#546E7A" text=".{attachments}" />
+<t:textpane id="ml_c4a" font="size:15" foreground="#1F2A33" text=".{summary}" width="100%" />
+</t:row>
+<t:row id="ml_c5" >
+<t:textpane id="ml_c5a" font="size:13" foreground="#546E7A" text=".{details}" width="100%" />
 </t:row>
 </t:pane>
 </t:row>

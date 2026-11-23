@@ -27,6 +27,10 @@
 <t:combobox id="te_8a" labeltext="Si esegue" validvaluesbinding="#{d.TaskEditUI.interactionVVB}" value="#{d.TaskEditUI.interaction}" width="180" />
 <t:combobox id="te_8b" labeltext="Avviso all'arrivo" validvaluesbinding="#{d.TaskEditUI.notifyVVB}" value="#{d.TaskEditUI.notify}" width="220" />
 </t:row>
+<t:row id="te_8c" coldistance="10" >
+<t:combobox id="te_8c1" labeltext="Commento all'approvazione" tooltip="Nei nodi di scelta vale per le opzioni che proseguono" validvaluesbinding="#{d.TaskEditUI.commentVVB}" value="#{d.TaskEditUI.commentOk}" width="180" />
+<t:combobox id="te_8c2" labeltext="Commento al rifiuto" tooltip="Nei nodi di scelta vale per le opzioni che respingono" validvaluesbinding="#{d.TaskEditUI.commentVVB}" value="#{d.TaskEditUI.commentKo}" width="180" />
+</t:row>
 <t:row id="te_9" >
 <t:field id="te_9a" labeltext="Parametro (ZWF_TASK_PARAM)" text="#{d.TaskEditUI.taskParam}" width="200" />
 </t:row>

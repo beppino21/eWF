@@ -129,7 +129,7 @@ public class MobileTasksUI extends PageBean implements Serializable {
     }
 
     public String getAllText() { return "Tutte (" + count(Filter.ALL) + ")"; }
-    public String getLateText() { return "In ritardo (" + count(Filter.LATE) + ")"; }
+    public String getLateText() { return "Ritardo (" + count(Filter.LATE) + ")"; }
     public String getOthersText() { return "Per altri (" + count(Filter.OTHERS) + ")"; }
     public String getAllBg() { return chipBg(Filter.ALL); }
     public String getLateBg() { return chipBg(Filter.LATE); }
@@ -142,7 +142,7 @@ public class MobileTasksUI extends PageBean implements Serializable {
     public String getOthersColor() { return chipColor(Filter.OTHERS); }
     private String chipColor(Filter f) { return m_filter == f ? "#FFFFFF" : "#1F2A33"; }
     private String chipBg(Filter f) { return m_filter == f ? "#1565C0" : "#FFFFFF"; }
-    private String chipFg(Filter f) { return m_filter == f ? "size:14;weight:bold;color:#FFFFFF" : "size:14;color:#1F2A33"; }
+    private String chipFg(Filter f) { return m_filter == f ? "size:13;weight:bold;color:#FFFFFF" : "size:13;color:#1F2A33"; }
 
     // ------------------------------------------------------------------ card
 
@@ -168,6 +168,13 @@ public class MobileTasksUI extends PageBean implements Serializable {
         public String getForWhom() {
             return w.reason() == Reason.SUBSTITUTE ? "per conto di " + w.forWhom()
                     : w.reason() == Reason.TEAM ? "team " + w.forWhom() : "";
+        }
+        /** Task, "per conto di" e allegati in una riga sola, che sul telefono va a capo. */
+        public String getDetails() {
+            StringBuilder b = new StringBuilder(getTask());
+            if (!getForWhom().isEmpty()) b.append(" \u00b7 ").append(getForWhom());
+            if (!getAttachments().isEmpty()) b.append(" \u00b7 ").append(getAttachments());
+            return b.toString();
         }
         public String getAttachments() {
             int n = m_counts.getOrDefault(w.processId(), InfoCounts.NONE).attachments();

@@ -22,7 +22,18 @@
 <t:label id="a_1l" font="weight:bold" text="#{d.TaskDetailUI.taskLabel}" />
 </t:row>
 <t:row id="a_2" >
-<t:textarea id="a_2t" height="60" labeltext="Nota" text="#{d.TaskDetailUI.note}" width="100%" />
+<t:textarea id="a_2t" height="60" labeltext="#{d.TaskDetailUI.noteLabel}" text="#{d.TaskDetailUI.note}" width="100%" />
+</t:row>
+<t:row id="a_2p" rendered="#{d.TaskDetailUI.pending}" >
+<t:pane id="a_2pp" background="#FFF3CD" border="#E0B84C" padding="10" rowdistance="6" width="100%" >
+<t:row id="a_2p1" >
+<t:label id="a_2p1l" foreground="#5D4E00" text="#{d.TaskDetailUI.pendingText}" />
+</t:row>
+<t:row id="a_2p2" coldistance="8" >
+<t:button id="a_2p2ok" actionListener="#{d.TaskDetailUI.onConfirmPending}" text="#{d.TaskDetailUI.pendingButton}" width="170" />
+<t:button id="a_2p2no" actionListener="#{d.TaskDetailUI.onCancelPending}" text="Annulla" width="100" />
+</t:row>
+</t:pane>
 </t:row>
 <t:row id="a_3" coldistance="8" rendered="#{d.TaskDetailUI.plainDecision}" >
 <t:button id="a_3ok" actionListener="#{d.TaskDetailUI.onApprove}" background="#C8E6C9" text="Approva" width="120" />

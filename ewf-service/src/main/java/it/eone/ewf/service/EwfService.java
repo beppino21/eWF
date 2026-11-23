@@ -426,7 +426,8 @@ public final class EwfService {
                 .map(o -> new Option(o.code(), o.label(), o.reject())).toList();
         return db.with(c -> {
             try (PreparedStatement ps = c.prepareStatement("""
-                    SELECT td.text, td.interaction, t.row_version, t.team_code, au.display_name AS assignee
+                    SELECT td.text, td.interaction, t.row_version, t.team_code, au.display_name AS assignee,
+                           td.comment_on_approve, td.comment_on_reject
                       FROM ewf_core.task_instance t
                       JOIN ewf_core.task_def td ON td.id = t.task_def_id
                       LEFT JOIN ewf_org.app_user au ON au.id = t.assignee_id
@@ -439,7 +440,8 @@ public final class EwfService {
                             : reason == Reason.TEAM ? rs.getString("team_code") : null;
                     return new MyTask(taskId, rs.getString("text"), reason, forWhom,
                             "WEB".equals(rs.getString("interaction")), options, taskFunctions(c, taskId),
-                            rs.getInt("row_version"));
+                            rs.getInt("row_version"), rs.getString("comment_on_approve"),
+                            rs.getString("comment_on_reject"));
                 }
             }
         });

@@ -376,16 +376,26 @@ public class EwfServicePostgresTest {
         assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveStep(VERDI, v2,
                 new DesignerService.StepEdit(null, 30, null, false, "ALL", 40, 10, null, null))).code(), "numero doppio");
         assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveTask(VERDI, v2,
-                new DesignerService.TaskEdit(null, n30, "Controllo", "RULES", null, null, false, null, 0, null, null, null, null))).code(),
+                new DesignerService.TaskEdit(null, n30, "Controllo", "RULES", null, null, false, null, 0, null, null, null, null, null, null))).code(),
                 "con le regole serve un ruolo");
         long t = d.saveTask(VERDI, v2, new DesignerService.TaskEdit(null, n30, "Controllo di gestione", "RULES", "APPROVATORE",
-                null, false, null, 50, "NAME", "WEB", "IMMEDIATE", null));
+                null, false, null, 50, "NAME", "WEB", "IMMEDIATE", null, null, null));
         d.saveStep(VERDI, v2, new DesignerService.StepEdit(steps.get(1).id(), 20, null, false, "ALL", 30, 10, null, null));
         DesignerService.VersionView vv = d.view(VERDI, v2);
         assertFalse(vv.hasErrors(), vv.problems().toString());
         assertEquals(List.of(10, 20, 30, 40), vv.definition().steps().stream().map(StepDef::stepNo).distinct().toList());
         assertEquals("EUR", d.steps(VERDI, v2).get(2).currency());
         assertEquals("IMMEDIATE", d.steps(VERDI, v2).get(2).tasks().get(0).notifyMode());
+        DesignerService.TaskRow tr = d.steps(VERDI, v2).get(2).tasks().get(0);
+        assertEquals("OPTIONAL", tr.commentOnApprove(), "predefinito: commento facoltativo all'approvazione");
+        assertEquals("REQUIRED", tr.commentOnReject(), "predefinito: commento obbligatorio al rifiuto");
+        d.saveTask(VERDI, v2, new DesignerService.TaskEdit(t, n30, "Controllo di gestione", "RULES", "APPROVATORE",
+                null, false, null, 50, "NAME", "WEB", "IMMEDIATE", null, "REQUIRED", "OPTIONAL"));
+        tr = d.steps(VERDI, v2).get(2).tasks().get(0);
+        assertEquals("REQUIRED", tr.commentOnApprove());
+        assertEquals("OPTIONAL", tr.commentOnReject());
+        assertEquals(Code.INVALID, assertThrows(ServiceException.class, () -> d.saveTask(VERDI, v2, new DesignerService.TaskEdit(t, n30,
+                "Controllo di gestione", "RULES", "APPROVATORE", null, false, null, 50, "NAME", "WEB", "IMMEDIATE", null, "SEMPRE", null))).code());
 
         // uno step che manda verso il nulla impedisce l'attivazione
         d.saveStep(VERDI, v2, new DesignerService.StepEdit(n30, 30, null, false, "ALL", 77, 10, new java.math.BigDecimal("5000"), "EUR"));
@@ -459,7 +469,7 @@ public class EwfServicePostgresTest {
         d.saveStep(VERDI, v2, new DesignerService.StepEdit(s30.id(), 30, "A", false, "ALL", null, 10, null, null));
         long b30 = d.saveStep(VERDI, v2, new DesignerService.StepEdit(null, 30, "B", false, "ALL", null, 20, null, null));
         d.saveTask(VERDI, v2, new DesignerService.TaskEdit(null, b30, "Verifica urgente", "STARTER", null, null, false, null, 0,
-                null, null, null, null));
+                null, null, null, null, null, null));
         DesignerService.VersionView vv = d.view(VERDI, v2);
         assertFalse(vv.hasErrors(), vv.problems().toString());
         assertEquals(List.of("A", "B", "NO"), vv.definition().steps().get(1).tasks().get(0).options().stream()
@@ -619,7 +629,7 @@ public class EwfServicePostgresTest {
         // disegno minimo, attivazione e avvio senza sistema di origine
         long s10 = d.saveStep(VERDI, v1, new DesignerService.StepEdit(null, 10, null, true, "ALL", null, null, null, null));
         d.saveTask(VERDI, v1, new DesignerService.TaskEdit(null, s10, "Approvazione responsabile IT", "RULES", "APPROVATORE",
-                null, false, null, 0, null, null, null, null));
+                null, false, null, 0, null, null, null, null, null, null));
         d.activate(VERDI, v1);
         long p = engine.start(new it.eone.ewf.engine.Requests.Start("RICH_IT", "RIC-0001", null, ROSSI, null)).id;
         assertEquals("RUNNING", value("SELECT status FROM ewf_core.process_instance WHERE id = " + p));

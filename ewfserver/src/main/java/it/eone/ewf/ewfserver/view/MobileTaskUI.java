@@ -388,6 +388,9 @@ public class MobileTaskUI extends PageBean implements Serializable {
             String who = p.kind() == PathEntry.Kind.CHOICE ? String.join(" / ", p.options()) : TaskDetailUI.nvl(p.who());
             return who.isEmpty() ? p.taskText() : p.taskText() + " · " + who;
         }
+        public String getTextColor() {
+            return p.kind() == PathEntry.Kind.PLANNED || p.kind() == PathEntry.Kind.CHOICE ? "#546E7A" : "#1F2A33";
+        }
         public String getTextFont() {
             return switch (p.kind()) {
                 case CURRENT -> "size:14;weight:bold;color:#1F2A33";

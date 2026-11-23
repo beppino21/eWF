@@ -171,12 +171,21 @@ public class TaskDetailUI extends PageBean implements Serializable {
 
     // ------------------------------------------------------------------ azioni sul task
 
+    /**
+     * Azione in attesa del commento obbligatorio (APPROVE / REJECT / CHOOSE), null se nessuna.
+     * Se il task chiede il commento e la nota e' vuota, invece di agire si apre il riquadro di conferma.
+     * Il controllo vero lo fa comunque il motore: qui si evita solo un errore all'utente.
+     */
+    private String m_pending;
+
     public void onApprove(ActionEvent ae) {
-        act(() -> svc().approve(uid(), myTask().taskId(), m_note, myTask().rowVersion()), "Approvato");
+        if (needsComment(false)) { m_pending = "APPROVE"; return; }
+        doApprove();
     }
 
     public void onReject(ActionEvent ae) {
-        act(() -> svc().reject(uid(), myTask().taskId(), m_note, myTask().rowVersion()), "Respinto");
+        if (needsComment(true)) { m_pending = "REJECT"; return; }
+        doReject();
     }
 
     public void onChoose(ActionEvent ae) {
@@ -184,7 +193,81 @@ public class TaskDetailUI extends PageBean implements Serializable {
             Statusbar.outputError("Scegliere come proseguire");
             return;
         }
+        if (needsComment(optionRejects())) { m_pending = "CHOOSE"; return; }
+        doChoose();
+    }
+
+    public void onConfirmPending(ActionEvent ae) {
+        if (m_note == null || m_note.isBlank()) {
+            Statusbar.outputError("Scrivere il commento");
+            return;
+        }
+        String p = m_pending;
+        m_pending = null;
+        if ("APPROVE".equals(p)) doApprove();
+        else if ("REJECT".equals(p)) doReject();
+        else if ("CHOOSE".equals(p)) doChoose();
+    }
+
+    public void onCancelPending(ActionEvent ae) { m_pending = null; }
+
+    private void doApprove() {
+        act(() -> svc().approve(uid(), myTask().taskId(), m_note, myTask().rowVersion()), "Approvato");
+    }
+
+    private void doReject() {
+        act(() -> svc().reject(uid(), myTask().taskId(), m_note, myTask().rowVersion()), "Respinto");
+    }
+
+    private void doChoose() {
         act(() -> svc().choose(uid(), myTask().taskId(), m_option, m_note, myTask().rowVersion()), "Scelta registrata");
+    }
+
+    private boolean needsComment(boolean reject) {
+        MyTask t = myTask();
+        return t != null && t.commentRequired(reject) && (m_note == null || m_note.isBlank());
+    }
+
+    private boolean optionRejects() {
+        MyTask t = myTask();
+        return t != null && t.options().stream().anyMatch(o -> o.code().equals(m_option) && o.reject());
+    }
+
+    public boolean isPending() { return m_pending != null; }
+    public boolean isNotPending() { return m_pending == null; }
+    public String getPendingText() {
+        if (m_pending == null) return "";
+        String what = switch (m_pending) {
+            case "APPROVE" -> "approvare";
+            case "REJECT" -> "respingere";
+            default -> "confermare questa scelta";
+        };
+        return "Per " + what + " serve un commento: scrivilo nella nota qui sopra e conferma.";
+    }
+    public String getPendingButton() {
+        if (m_pending == null) return "";
+        return switch (m_pending) {
+            case "APPROVE" -> "Conferma approvazione";
+            case "REJECT" -> "Conferma rifiuto";
+            default -> "Conferma scelta";
+        };
+    }
+
+    /** Etichetta della nota: dice quando il commento e' obbligatorio. */
+    public String getNoteLabel() {
+        MyTask t = myTask();
+        if (t == null) return "Nota";
+        boolean ok = t.commentRequired(false), ko = t.commentRequired(true);
+        if (t.options().isEmpty()) {
+            if (ok && ko) return "Nota (obbligatoria)";
+            if (ko) return "Nota (obbligatoria per respingere)";
+            if (ok) return "Nota (obbligatoria per approvare)";
+            return "Nota";
+        }
+        if (ok && ko) return "Nota (obbligatoria)";
+        if (ko) return "Nota (obbligatoria per le scelte che respingono)";
+        if (ok) return "Nota (obbligatoria per le scelte che proseguono)";
+        return "Nota";
     }
 
     public void onMove(ActionEvent ae) {
@@ -242,6 +325,7 @@ public class TaskDetailUI extends PageBean implements Serializable {
                 return;
             }
             m_note = null;
+            m_pending = null;
             Statusbar.outputSuccess(okMessage);
             if (m_listener != null) m_listener.reactOnBack();
         } catch (ServiceException e) {

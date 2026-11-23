@@ -92,8 +92,17 @@ public final class Views {
      * asSubstitute: l'utente agirebbe per conto di forWhom. rowVersion: da ripassare alle azioni, cosi' se
      * un collega ha gia' firmato l'azione viene rifiutata invece di sovrascrivere.
      */
+    /**
+     * commentOnApprove / commentOnReject: NONE, OPTIONAL o REQUIRED (vedi CommentRule del motore).
+     * Le opzioni seguono la regola dell'approvazione, o quella del rifiuto se l'opzione respinge.
+     */
     public record MyTask(long taskId, String taskText, Reason reason, String forWhom, boolean webActionable,
-                         List<Option> options, List<Function> functions, int rowVersion) {}
+                         List<Option> options, List<Function> functions, int rowVersion,
+                         String commentOnApprove, String commentOnReject) {
+        public String commentFor(boolean reject) { return reject ? commentOnReject : commentOnApprove; }
+        public boolean commentRequired(boolean reject) { return "REQUIRED".equals(commentFor(reject)); }
+        public boolean commentHidden(boolean reject) { return "NONE".equals(commentFor(reject)); }
+    }
 
     public record Option(String code, String label, boolean reject) {}
 

@@ -233,6 +233,9 @@ public final class WorkflowEngine {
             } else if (optionCode != null) {
                 throw EngineException.of(Code.INVALID_STATE, "Il task %d non prevede opzioni", t.id);
             }
+            if (!system && td.commentFor(action == Action.KO) == CommentRule.REQUIRED && (note == null || note.isBlank()))
+                throw EngineException.of(Code.BAD_REQUEST, action == Action.KO
+                        ? "Per respingere serve un commento" : "Per proseguire serve un commento");
             boolean asSubst = system ? false : authorize(actorId, t, p, td, true);
             t.status = TaskStatus.EXECUTING;
             t.action = action.name();

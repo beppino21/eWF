@@ -81,6 +81,9 @@ public class TaskEditUI extends PageBean implements Serializable {
     private final ValidValuesBinding m_previewVVB = new ValidValuesBinding();
     private final ValidValuesBinding m_interactionVVB = new ValidValuesBinding();
     private final ValidValuesBinding m_notifyVVB = new ValidValuesBinding();
+    private final ValidValuesBinding m_commentVVB = new ValidValuesBinding();
+    private String m_commentOk = "OPTIONAL";
+    private String m_commentKo = "REQUIRED";
 
     private String m_text;
     private String m_mode = "RULES";
@@ -109,6 +112,9 @@ public class TaskEditUI extends PageBean implements Serializable {
         m_interactionVVB.addValidValue("SAPGUI_ONLY", "solo da SAP GUI");
         m_notifyVVB.addValidValue("NONE", "solo nel riepilogo periodico");
         m_notifyVVB.addValidValue("IMMEDIATE", "mail subito");
+        m_commentVVB.addValidValue("NONE", "non richiesto");
+        m_commentVVB.addValidValue("OPTIONAL", "facoltativo");
+        m_commentVVB.addValidValue("REQUIRED", "obbligatorio");
         m_eventsVVB.addValidValue("ON_ACTIVATE", "all'arrivo del task");
         m_eventsVVB.addValidValue("BEFORE_ACTION", "prima dell'azione (puo' bloccarla)");
         m_eventsVVB.addValidValue("ON_OK", "su approvazione");
@@ -153,6 +159,8 @@ public class TaskEditUI extends PageBean implements Serializable {
         m_interaction = t.interaction();
         m_notify = t.notifyMode();
         m_taskParam = t.taskParam();
+        m_commentOk = t.commentOnApprove();
+        m_commentKo = t.commentOnReject();
         loadExtras();
     }
 
@@ -204,7 +212,7 @@ public class TaskEditUI extends PageBean implements Serializable {
         try {
             boolean isNew = m_taskId == null;
             m_taskId = designer().saveTask(uid(), m_versionId, new TaskEdit(m_taskId, m_stepId, m_text, m_mode, m_role, m_handler,
-                    m_teamTask, m_team, weight, m_preview, m_interaction, m_notify, m_taskParam));
+                    m_teamTask, m_team, weight, m_preview, m_interaction, m_notify, m_taskParam, m_commentOk, m_commentKo));
             Statusbar.outputSuccess(isNew ? "Task creato: ora si possono aggiungere agganci, opzioni e funzioni" : "Task salvato");
             loadExtras();
             if (m_listener != null) m_listener.saved();
@@ -309,6 +317,11 @@ public class TaskEditUI extends PageBean implements Serializable {
     public ValidValuesBinding getPreviewVVB() { return m_previewVVB; }
     public ValidValuesBinding getInteractionVVB() { return m_interactionVVB; }
     public ValidValuesBinding getNotifyVVB() { return m_notifyVVB; }
+    public ValidValuesBinding getCommentVVB() { return m_commentVVB; }
+    public String getCommentOk() { return m_commentOk; }
+    public void setCommentOk(String v) { m_commentOk = v == null ? "OPTIONAL" : v; }
+    public String getCommentKo() { return m_commentKo; }
+    public void setCommentKo(String v) { m_commentKo = v == null ? "REQUIRED" : v; }
     public boolean isRulesMode() { return "RULES".equals(m_mode); }
     public boolean isHandlerMode() { return "HANDLER".equals(m_mode); }
     public boolean isExisting() { return m_taskId != null; }
