@@ -441,7 +441,7 @@ public final class EwfService {
                     return new MyTask(taskId, rs.getString("text"), reason, forWhom,
                             "WEB".equals(rs.getString("interaction")), options, taskFunctions(c, taskId),
                             rs.getInt("row_version"), rs.getString("comment_on_approve"),
-                            rs.getString("comment_on_reject"));
+                            rs.getString("comment_on_reject"), rs.getString("interaction"));
                 }
             }
         });

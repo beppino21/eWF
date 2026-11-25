@@ -31,6 +31,10 @@ public final class WorkflowEngine {
     public static final String REASON_END_FAILED = "END_FAILED";
     public static final String REASON_UNKNOWN = "UNKNOWN_EXECUTION";
     public static final String REASON_RESTARTED = "RESTARTED";
+    /** Il sistema di origine ha deciso prima che il processo arrivasse al task INTERACTIVE, o in modo diverso dall'atteso. */
+    public static final String REASON_SOURCE_DECISION = "SOURCE_DECISION";
+    /** Parametro del task INTERACTIVE: esito atteso nel sistema di origine (OK o KO); assente = qualsiasi. */
+    public static final String PARAM_EXPECT = "EXPECT";
 
     private final DefinitionStore defs;
     private final RuntimeStore store;
@@ -222,6 +226,9 @@ public final class WorkflowEngine {
             TaskDef td = v.task(t.taskDefId);
             if (td.interaction() == Interaction.SAPGUI_ONLY && !system)
                 throw EngineException.of(Code.INVALID_STATE, "Task %d eseguibile solo da SAP GUI", t.id);
+            if (td.interaction() == Interaction.INTERACTIVE && !system)
+                throw EngineException.of(Code.INVALID_STATE,
+                        "Task %d: la decisione si prende nel sistema di origine, eWF la rileva da solo", t.id);
             OptionDef option = null;
             Action action = requested;
             if (td.isChoice()) {
@@ -631,6 +638,8 @@ public final class WorkflowEngine {
                         : changed(e, open);
                 case DELETED -> deleted(e, open);
                 case TOUCHED -> touched(e, open, starter, warning);
+                case APPROVED_IN_SOURCE -> decidedInSource(e, open, true);
+                case REJECTED_IN_SOURCE -> decidedInSource(e, open, false);
             };
         } catch (EngineException ex) {
             return new EventResult(e.queueId(), EventResult.EventStatus.ERROR,
@@ -696,6 +705,85 @@ public final class WorkflowEngine {
         EventResult r = startByRules(e, starter, warning);
         return new EventResult(r.queueId(), r.status(),
                 "Dopo il processo " + prev.id + " (" + prev.status + "), " + why + ": " + r.message(), r.processId());
+    }
+
+    /**
+     * Il sistema di origine ha deciso (es. OdA rilasciato o respinto in My Inbox). Per ogni processo aperto:
+     * <ul>
+     *   <li>task INTERACTIVE aperto con esito atteso compatibile (parametro EXPECT=OK/KO, assente = qualsiasi):
+     *       il sistema lo chiude con quell'esito e il processo prosegue;</li>
+     *   <li>nessun task INTERACTIVE aperto (decisione presa prima della fine dell'approvazione eWF) o esito diverso
+     *       dall'atteso: il processo va in errore, cosi' compare in "Processi in errore". L'evento e' comunque
+     *       elaborato (WARNING): ritentarlo non cambierebbe nulla.</li>
+     * </ul>
+     * Nessun processo aperto: niente (documento sotto soglia, precedente a eWF, o gia' concluso).
+     */
+    private EventResult decidedInSource(DocumentEvent e, List<ProcessInstance> open, boolean approved) {
+        if (open.isEmpty())
+            return done(e, "Nessun processo aperto: decisione del sistema di origine registrata solo li'", null);
+        String outcome = approved ? "approvato" : "respinto";
+        List<String> notes = new ArrayList<>();
+        List<String> anomalies = new ArrayList<>();
+        Long last = null;
+        for (ProcessInstance p : open) {
+            last = p.id;
+            if (p.status != ProcessStatus.RUNNING) {
+                notes.add(p.id + ": " + p.status + ", nessuna azione");
+                continue;
+            }
+            ProcessVersion v = defs.version(p.versionId);
+            List<TaskInstance> waiting = store.tasksOf(p.id).stream()
+                    .filter(t -> t.status == TaskStatus.OPEN && v.task(t.taskDefId).interaction() == Interaction.INTERACTIVE)
+                    .toList();
+            if (waiting.isEmpty()) {
+                String why = "Documento " + outcome + " nel sistema di origine prima della fine dell'approvazione eWF";
+                sourceDecisionError(p, why);
+                anomalies.add(p.id + ": " + why);
+                continue;
+            }
+            for (TaskInstance t : waiting) {
+                String expect = param(v.task(t.taskDefId).taskParam(), PARAM_EXPECT);
+                if (expect != null && !expect.equalsIgnoreCase(approved ? "OK" : "KO")) {
+                    String why = "Documento " + outcome + " nel sistema di origine, ma il processo si aspettava "
+                            + ("OK".equalsIgnoreCase(expect) ? "l'approvazione" : "il rifiuto");
+                    sourceDecisionError(p, why);
+                    anomalies.add(p.id + ": " + why);
+                    break;
+                }
+                act(t.id, 0L, approved ? Action.OK : Action.KO, null,
+                        "Documento " + outcome + " nel sistema di origine", null, true);
+                notes.add(p.id + ": task " + t.id + " chiuso (" + outcome + " nel sistema di origine)");
+            }
+        }
+        if (!anomalies.isEmpty()) {
+            notes.addAll(anomalies);
+            return new EventResult(e.queueId(), EventResult.EventStatus.WARNING, String.join("; ", notes), last);
+        }
+        return done(e, String.join("; ", notes), last);
+    }
+
+    private void sourceDecisionError(ProcessInstance proc, String why) {
+        tx.run(() -> {
+            ProcessInstance p = requireProcess(proc.id);
+            p.status = ProcessStatus.ERROR;
+            String reason = REASON_SOURCE_DECISION + ":" + why;
+            p.statusReason = reason.length() > 255 ? reason.substring(0, 255) : reason;
+            store.updateProcess(p);
+            audit("SOURCE_DECISION_MISMATCH", null, "SYSTEM", p.id, null, Map.of("message", why));
+        });
+    }
+
+    /** Valore di una chiave in un parametro "K=V;K2=V2" (o solo "V" se la chiave e' l'unica attesa). */
+    static String param(String taskParam, String key) {
+        if (taskParam == null || taskParam.isBlank()) return null;
+        for (String part : taskParam.split("[;,]")) {
+            int i = part.indexOf('=');
+            if (i > 0 && part.substring(0, i).trim().equalsIgnoreCase(key)) {
+                String v = part.substring(i + 1).trim();
+                return v.isEmpty() ? null : v;
+            }
+        }
+        return null;
     }
 
     /** Documento dell'evento: la fotografia se c'e', altrimenti la lettura dal sistema di origine. */

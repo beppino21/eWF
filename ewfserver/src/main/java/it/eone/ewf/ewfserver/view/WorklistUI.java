@@ -268,7 +268,7 @@ public class WorklistUI extends PageBean implements Serializable {
         public String getProcessType() { return w.processTypeText(); }
         public String getDocument() { return w.documentKey(); }
         public String getSummary() { return w.summary() == null ? "" : w.summary(); }
-        public String getTaskText() { return w.taskText() + (w.webActionable() ? "" : " (in SAP GUI)"); }
+        public String getTaskText() { return w.taskText() + (w.webActionable() ? "" : " (in SAP)"); }
         public String getForWhom() {
             return w.reason() == Reason.SUBSTITUTE ? "per " + w.forWhom()
                     : w.reason() == Reason.TEAM ? "team " + w.forWhom() : "";

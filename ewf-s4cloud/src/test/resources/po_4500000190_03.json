@@ -1,0 +1,29 @@
+{
+  "@odata.context": "$metadata#PurchaseOrder/$entity",
+  "PurchaseOrder": "4500000190",
+  "PurchaseOrderType": "NB",
+  "CreatedByUser": "CB9980000033",
+  "LastChangeDateTime": "2026-11-25T14:04:04.970143Z",
+  "PurchaseOrderDeletionCode": "",
+  "ReleaseIsNotCompleted": true,
+  "PurchasingProcessingStatus": "03",
+  "CompanyCode": "S001",
+  "PurchasingOrganization": "OA01",
+  "PurchasingGroup": "002",
+  "Supplier": "1000027",
+  "DocumentCurrency": "EUR",
+  "_PurchaseOrderItem": [
+    {
+      "PurchaseOrder": "4500000190",
+      "PurchaseOrderItem": "10",
+      "DocumentCurrency": "EUR",
+      "MaterialGroup": "CA01",
+      "Material": "A011905",
+      "PurchaseOrderItemText": "ALLUMINA SEMIWET",
+      "Plant": "PL01",
+      "PurchaseOrderQuantityUnit": "KG",
+      "NetAmount": 550000.0,
+      "OrderQuantity": 1100.0
+    }
+  ]
+}

@@ -300,6 +300,7 @@ public final class FlowSvg {
         if (t.requiredWeight() > 0) w.append(" · peso ").append(t.requiredWeight());
         if (t.notifyMode() == NotifyMode.IMMEDIATE) w.append(" · ✉");
         if (t.interaction() == Interaction.SAPGUI_ONLY) w.append(" · solo SAP GUI");
+        if (t.interaction() == Interaction.INTERACTIVE) w.append(" · decisione in SAP");
         return w.toString();
     }
 

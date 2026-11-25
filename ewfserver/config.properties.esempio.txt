@@ -44,3 +44,11 @@ EWF_MAX_ATTACHMENT_MB=20
 # lasciando il filtro attivo. In produzione NON va impostato.
 # EWF_FRAME_ALLOWED=http://localhost:51000
 # Spegnimento completo (sconsigliato, meglio la riga sopra): EWF_SECURITY_HEADERS=false
+
+# --- S/4HANA Cloud Public (ewf-s4cloud, D23) ---------------------------------
+# Si attiva da solo se ewf_core.backend_system ha un sistema attivo di tipo S4_PUBLIC
+# (script ewf-s4cloud/db/s4_public_backend_esempio.sql). NAME = connection_ref, es. S4DEV.
+# EWF_S4_S4DEV_URL=https://my434383-api.s4hana.cloud.sap
+# EWF_S4_S4DEV_USER=EWF_COMM
+# EWF_S4_S4DEV_INBOX_URL=https://my434383.s4hana.cloud.sap/ui#WorkflowTask-displayInbox   (facoltativa)
+# La password NON va qui: solo variabile d'ambiente EWF_S4_S4DEV_PASSWD in setenv.bat.

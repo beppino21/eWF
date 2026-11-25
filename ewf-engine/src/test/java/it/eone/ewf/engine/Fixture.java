@@ -198,6 +198,35 @@ final class Fixture {
                         List.of(task(4201, "Gestione reclamo", null, 0, AssigneeMode.STARTER))))));
     }
 
+
+    static final String ODA_S4 = "ODA_S4";
+
+    /**
+     * Strada D (S/4 Public, D23): SAP trattiene l'OdA, eWF decide, l'ultima parola si da' in My Inbox.
+     *   10 Responsabile acquisti (eWF) -> OK: 20, KO: 30
+     *   20 "Rilascia in SAP" (INTERACTIVE, EXPECT=OK) -> fine
+     *   30 "Respingi in SAP" (INTERACTIVE, EXPECT=KO) -> fine negativa
+     */
+    ProcessInstance startOdaS4(String ebeln) {
+        if (b.defs().processType(ODA_S4).isEmpty()) {
+            b.defineType(new ProcessType(ODA_S4, "OdA S/4 Public", "F", false, false, false));
+            b.activate(new ProcessVersion(60, ODA_S4, 1, null, List.of(
+                    new StepDef(10, true, JoinPolicy.ALL, 20, 30, null,
+                            List.of(task(6001, "Rilascio Responsabile Acquisti", "RESPONSABILE_ACQ", 100, AssigneeMode.RULES))),
+                    new StepDef(20, false, JoinPolicy.ALL, null, null, null,
+                            List.of(interactive(6002, "Rilascia l'OdA in SAP (My Inbox)", "EXPECT=OK"))),
+                    new StepDef(30, false, JoinPolicy.ALL, null, null, null,
+                            List.of(interactive(6003, "Respingi l'OdA in SAP (My Inbox)", "EXPECT=KO"))))));
+        }
+        purchaseOrders.value(ebeln, Money.of("60000", "EUR"));
+        return engine.start(new Requests.Start(ODA_S4, ebeln, null, ROSSI, null));
+    }
+
+    static TaskDef interactive(long id, String text, String param) {
+        return new TaskDef(id, 0, text, "RESPONSABILE_ACQ_L1", 200, AssigneeMode.RULES, null, false, null,
+                PreviewMode.NAME, Interaction.INTERACTIVE, param, List.of());
+    }
+
     static final String AVVISO = "AVVISO";
 
     /** 10 richiesta (nessun avviso) -> 20 rilascio con avviso immediato -> fine. */

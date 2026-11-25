@@ -30,7 +30,14 @@ public final class Requests {
          * Evento neutro: "il documento e' stato toccato". eWF decide dallo stato del documento (fotografia
          * dell'evento, o lettura) e dei suoi processi: avvio, riavvio, annullamento o niente.
          */
-        TOUCHED
+        TOUCHED,
+        /**
+         * Il sistema di origine ha concluso la decisione con esito positivo (es. S/4 Public: OdA rilasciato in My Inbox).
+         * Chiude il task INTERACTIVE aperto; se il processo non e' ancora arrivato li', il processo va in errore.
+         */
+        APPROVED_IN_SOURCE,
+        /** Come APPROVED_IN_SOURCE, con esito negativo (es. OdA respinto in My Inbox, stato 08). */
+        REJECTED_IN_SOURCE
     }
 
     /**

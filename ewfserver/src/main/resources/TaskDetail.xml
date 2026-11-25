@@ -63,6 +63,18 @@
 </t:row>
 </t:foldablepane>
 </t:row>
+<t:row id="a_9i" rendered="#{d.TaskDetailUI.interactive}" >
+<t:pane id="a_9ip" background="#FFF8E1" border="#FFE082" padding="10" rowdistance="6" width="100%" >
+<t:row id="a_9i1" >
+<t:textpane id="a_9it" text="#{d.TaskDetailUI.interactiveText}" width="100%" />
+</t:row>
+<t:row id="a_9i2" coldistance="8" >
+<t:button id="a_9ib" actionListener="#{d.TaskDetailUI.onOpenInbox}" enabled="#{d.TaskDetailUI.inboxAvailable}" font="weight:bold" text="Apri My Inbox" width="140" />
+<t:label id="a_9il" text="Documento:" />
+<t:field id="a_9if" enabled="false" text="#{d.TaskDetailUI.interactiveDocument}" width="140" />
+</t:row>
+</t:pane>
+</t:row>
 <t:row id="a_9" rendered="#{d.TaskDetailUI.sapGuiOnly}" >
 <t:label id="a_9l" font="weight:bold" foreground="#B26A00" text="Questa attivita' si completa in SAP GUI." />
 </t:row>

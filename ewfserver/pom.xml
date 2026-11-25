@@ -101,6 +101,12 @@
 			<artifactId>ewf-sap</artifactId>
 			<version>0.1.0-SNAPSHOT</version>
 		</dependency>
+		<!-- S/4HANA Cloud Public via OData (strada D, D23); si attiva solo con un backend_system S4_PUBLIC -->
+		<dependency>
+			<groupId>it.eone.ewf</groupId>
+			<artifactId>ewf-s4cloud</artifactId>
+			<version>0.1.0-SNAPSHOT</version>
+		</dependency>
 	</dependencies>
     
 	<build>

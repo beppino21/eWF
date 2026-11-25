@@ -54,6 +54,7 @@ public final class EwfApp {
     private final AuthService auth;
     private final ZoneId zone;
     private final String sapDestination;
+    private final S4 s4;
 
     public static EwfApp get() {
         EwfApp i = instance;
@@ -96,8 +97,15 @@ public final class EwfApp {
         Sap sap = dest.isBlank() ? Sap.none() : Sap.connect(dest);
         sapDestination = sap.destination();
 
+        // S/4 Public (D23): se c'e' un sistema S4_PUBLIC attivo, gli OdA si leggono da li'; gli altri tipi
+        // documento restano all'eventuale collegamento JCo.
+        s4 = S4.fromDatabase(ds).orElse(null);
+        it.eone.ewf.engine.spi.DocumentAdapterRegistry adapters = s4 == null ? sap.adapters()
+                : docType -> it.eone.ewf.s4cloud.S4PurchaseOrderAdapter.DOC_TYPE.equals(docType)
+                        ? Optional.of(s4.adapter()) : sap.adapters().find(docType);
+
         RateCurrencyConverter currency = new RateCurrencyConverter();
-        engine = JdbcEngineFactory.create(ds, sap.handlers(), sap.adapters(),
+        engine = JdbcEngineFactory.create(ds, sap.handlers(), adapters,
                 currency, clock, new EngineConfig(EngineConfig.defaults().fallbackTeamCode(), zone));
         long maxMb = AppConfig.getInt("EWF_MAX_ATTACHMENT_MB", 20);
         service = new EwfService(engine, db, new JdbcUserDirectory(db), sap.handlers(), sap.backends(), clock, zone,
@@ -110,7 +118,8 @@ public final class EwfApp {
         startRules = new StartRuleService(db, admin, engine);
         assignments = new AssignmentService(db, admin, currency, EngineConfig.defaults().fallbackTeamCode());
         System.out.println("[EwfApp] Avviato: DB " + url + " (" + user + ")"
-                + (sapDestination == null ? " - senza SAP" : " - SAP " + sapDestination));
+                + (sapDestination == null ? " - senza SAP (JCo)" : " - SAP " + sapDestination)
+                + (s4 == null ? "" : " - S/4 Public " + s4.backendCode()));
     }
 
     public EwfService service() { return service; }
@@ -124,6 +133,10 @@ public final class EwfApp {
     public AuthService auth() { return auth; }
     public ZoneId zone() { return zone; }
     public Optional<String> sapDestination() { return Optional.ofNullable(sapDestination); }
+    /** Sistema S/4 Public collegato, se c'e'. */
+    Optional<S4> s4() { return Optional.ofNullable(s4); }
+    /** Indirizzo della My Inbox di S/4 Public (task INTERACTIVE), se collegato. */
+    public Optional<String> s4InboxUrl() { return s4().map(S4::inboxUrl); }
 
     /** Chiude il pool di connessioni; la prossima richiesta ricrea i servizi. Chiamato da JobHost alla chiusura. */
     public static synchronized void shutdown() {

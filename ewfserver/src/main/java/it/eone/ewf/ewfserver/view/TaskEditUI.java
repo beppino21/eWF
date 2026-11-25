@@ -108,7 +108,7 @@ public class TaskEditUI extends PageBean implements Serializable {
         m_previewVVB.addValidValue("ROLE", "solo il ruolo");
         m_previewVVB.addValidValue("HIDDEN", "non mostrare");
         m_interactionVVB.addValidValue("WEB", "dal web");
-        m_interactionVVB.addValidValue("INTERACTIVE", "interattivo");
+        m_interactionVVB.addValidValue("INTERACTIVE", "decisione in SAP (My Inbox)");
         m_interactionVVB.addValidValue("SAPGUI_ONLY", "solo da SAP GUI");
         m_notifyVVB.addValidValue("NONE", "solo nel riepilogo periodico");
         m_notifyVVB.addValidValue("IMMEDIATE", "mail subito");

@@ -437,7 +437,21 @@ public class TaskDetailUI extends PageBean implements Serializable {
 
     public boolean isLoaded() { return m_detail != null; }
     public boolean isCanAct() { return !m_readOnly && myTask() != null && myTask().webActionable(); }
-    public boolean isSapGuiOnly() { return !m_readOnly && myTask() != null && !myTask().webActionable(); }
+    public boolean isSapGuiOnly() { return !m_readOnly && myTask() != null && !myTask().webActionable() && !myTask().interactive(); }
+    /** Task INTERACTIVE (S/4 Public, D23): si decide nella My Inbox, eWF chiude il task quando rileva la decisione. */
+    public boolean isInteractive() { return !m_readOnly && myTask() != null && myTask().interactive(); }
+    public boolean isInboxAvailable() { return isInteractive() && it.eone.ewf.ewfserver.app.EwfApp.get().s4InboxUrl().isPresent(); }
+    public String getInteractiveText() {
+        String doc = m_detail == null ? "" : m_detail.header().documentKey();
+        return "Questa attivita' si completa in SAP: apri la My Inbox, cerca il documento " + doc
+                + " e decidi li'. eWF chiude l'attivita' da solo appena rileva la decisione (entro qualche minuto).";
+    }
+    public String getInteractiveDocument() { return m_detail == null ? "" : m_detail.header().documentKey(); }
+    public void onOpenInbox(ActionEvent ae) {
+        java.util.Optional<String> url = it.eone.ewf.ewfserver.app.EwfApp.get().s4InboxUrl();
+        if (url.isEmpty()) { Statusbar.outputError("Indirizzo della My Inbox non configurato"); return; }
+        org.eclnt.jsfserver.defaultscreens.Client.instance().openURLInOwnBrowser(url.get(), "_blank");
+    }
     public boolean isHasOptions() { return isCanAct() && !myTask().options().isEmpty(); }
     public boolean isPlainDecision() { return isCanAct() && myTask().options().isEmpty(); }
     public boolean isHasFunctions() { return isCanAct() && !myTask().functions().isEmpty(); }

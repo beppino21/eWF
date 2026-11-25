@@ -164,7 +164,7 @@ public class MobileTasksUI extends PageBean implements Serializable {
             if (w.summary() != null && !w.summary().isBlank()) return w.summary();
             return w.starter() == null ? "" : "Richiesto da " + w.starter();
         }
-        public String getTask() { return w.taskText() + (w.webActionable() ? "" : " (in SAP GUI)"); }
+        public String getTask() { return w.taskText() + (w.webActionable() ? "" : " (in SAP)"); }
         public String getForWhom() {
             return w.reason() == Reason.SUBSTITUTE ? "per conto di " + w.forWhom()
                     : w.reason() == Reason.TEAM ? "team " + w.forWhom() : "";

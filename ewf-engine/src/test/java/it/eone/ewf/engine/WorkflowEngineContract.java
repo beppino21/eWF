@@ -1119,4 +1119,72 @@ abstract class WorkflowEngineContract {
         assertEquals(Requests.EventResult.EventStatus.ERROR, confirmed.get(0).status());
         assertEquals(Requests.EventResult.EventStatus.DONE, confirmed.get(1).status(), "gli altri documenti vanno avanti");
     }
+
+    // --- decisione presa nel sistema di origine (S/4 Public, strada D) -------------
+
+    private Requests.EventResult decided(String key, boolean approved) {
+        return f.engine.onDocumentEvent(new Requests.DocumentEvent("S-" + key + "-" + System.nanoTime(), "F", key, null,
+                approved ? Requests.DocumentEventType.APPROVED_IN_SOURCE : Requests.DocumentEventType.REJECTED_IN_SOURCE,
+                null));
+    }
+
+    @Test
+    void taskInterattivoSiChiudeSoloConLaDecisioneDelSistemaDiOrigine() {
+        ProcessInstance p = f.startOdaS4("4500000901");
+        f.ok(f.openTask(p.id).id, BIANCHI);
+        TaskInstance sap = f.openTask(p.id);
+        assertEquals(VERDI, sap.assigneeId);
+        EngineException ex = assertThrows(EngineException.class, () -> f.ok(sap.id, VERDI));
+        assertEquals(EngineException.Code.INVALID_STATE, ex.code(), "da eWF non si approva: si decide in SAP");
+        Requests.EventResult r = decided("4500000901", true);
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status(), r.message());
+        assertEquals(ProcessStatus.COMPLETED, f.status(p.id));
+        assertEquals(TaskStatus.OK, f.store.task(sap.id).orElseThrow().status);
+    }
+
+    @Test
+    void rifiutoInEwfPortaAlRifiutoInSapEChiudeIlProcessoRespinto() {
+        ProcessInstance p = f.startOdaS4("4500000902");
+        f.ko(f.openTask(p.id).id, BIANCHI, "fornitore sbagliato");
+        TaskInstance sap = f.openTask(p.id);
+        assertEquals(30, sap.stepNo);
+        Requests.EventResult r = decided("4500000902", false);
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status(), r.message());
+        assertEquals(ProcessStatus.REJECTED, f.status(p.id));
+    }
+
+    @Test
+    void decisioneInSapPrimaDellaFineDellApprovazioneMetteIlProcessoInErrore() {
+        ProcessInstance p = f.startOdaS4("4500000903");
+        Requests.EventResult r = decided("4500000903", true);
+        assertEquals(Requests.EventResult.EventStatus.WARNING, r.status(), "elaborato: ritentare non servirebbe");
+        ProcessInstance now = f.store.process(p.id).orElseThrow();
+        assertEquals(ProcessStatus.ERROR, now.status);
+        assertTrue(now.statusReason.startsWith(WorkflowEngine.REASON_SOURCE_DECISION), now.statusReason);
+    }
+
+    @Test
+    void decisioneInSapDiversaDallAttesaMetteIlProcessoInErrore() {
+        ProcessInstance p = f.startOdaS4("4500000904");
+        f.ok(f.openTask(p.id).id, BIANCHI);
+        Requests.EventResult r = decided("4500000904", false);
+        assertEquals(Requests.EventResult.EventStatus.WARNING, r.status(), r.message());
+        assertEquals(ProcessStatus.ERROR, f.status(p.id));
+        assertTrue(f.openTask(p.id).isOpen(), "il task resta aperto: decide l'amministratore");
+    }
+
+    @Test
+    void decisioneInSapSenzaProcessiApertiNonFaNulla() {
+        Requests.EventResult r = decided("4500000905", true);
+        assertEquals(Requests.EventResult.EventStatus.DONE, r.status());
+        assertNull(r.processId());
+    }
+
+    @Test
+    void parametroDelTaskLettoPerChiave() {
+        assertEquals("OK", WorkflowEngine.param("EXPECT=OK", "EXPECT"));
+        assertEquals("KO", WorkflowEngine.param("X=1; expect = KO", "EXPECT"));
+        assertNull(WorkflowEngine.param("ZWF_TASK_PARAM", "EXPECT"));
+        assertNull(WorkflowEngine.param(null, "EXPECT"));
+    }
 }

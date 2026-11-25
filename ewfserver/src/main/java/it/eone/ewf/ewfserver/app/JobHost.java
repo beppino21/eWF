@@ -14,6 +14,9 @@ import it.eone.ewf.ewfserver.config.AppConfig;
 import it.eone.ewf.notify.DigestJob;
 import it.eone.ewf.notify.NotifyJob;
 import it.eone.ewf.sap.StartQueueJob;
+import it.eone.ewf.s4cloud.PurchaseOrderPollJob;
+import it.eone.ewf.s4cloud.SyncWatermark;
+import it.eone.connect.sync.SyncState;
 
 import jakarta.servlet.ServletContextEvent;
 import jakarta.servlet.ServletContextListener;
@@ -30,6 +33,7 @@ import java.util.Set;
  *
  * All'avvio di Tomcat crea i servizi (EwfApp) e lo scheduler di eone-connect con i job:
  *   EWF_START_QUEUE  coda degli avvii /EWF/START_Q (solo se SAP e' collegato)   ogni 30 secondi
+ *   EWF_S4_PO_POLL   OdA modificati in S/4 Public (solo se c'e' un S4_PUBLIC)  ogni minuto
  *   EWF_NOTIFY       avvisi immediati dei task                                  ogni minuto
  *   EWF_MAIL_DIGEST  riepilogo periodico                                        giorni feriali 07:15
  *   EONE_MAIL_SEND   spedizione delle mail in coda (solo se EONE_SMTP_HOST c'e') ogni minuto
@@ -52,6 +56,8 @@ public final class JobHost implements ServletContextListener {
 
     private Scheduler scheduler;
     private boolean startQueueActive;
+    /** Job che legge gli eventi dei documenti: la coda on-premise o il polling di S/4 Public. */
+    private String startJobCode;
 
     @Override
     public void contextInitialized(ServletContextEvent event) {
@@ -69,6 +75,12 @@ public final class JobHost implements ServletContextListener {
                     .register(DigestJob.KEY, () -> new DigestJob(app.dataSource(), Clock.system(app.zone()), baseUrl));
             if (dest != null)
                 registry.register(StartQueueJob.KEY, () -> new StartQueueJob(app.engine(), dest));
+            S4 s4 = app.s4().orElse(null);
+            if (s4 != null) {
+                SyncState sync = new SyncState(new Db(app.dataSource()));
+                registry.register(PurchaseOrderPollJob.KEY, () -> new PurchaseOrderPollJob(app.engine(), s4.api(),
+                        () -> new SyncWatermark(sync, s4.backendCode()), s4.backendCode(), Clock.systemUTC()));
+            }
             boolean smtp = AppConfig.get("EONE_SMTP_HOST", null) != null;
             if (smtp) {
                 SmtpConfig cfg = SmtpConfig.fromEnv("EONE_SMTP", JobHost::configOrSecret);
@@ -86,6 +98,10 @@ public final class JobHost implements ServletContextListener {
             if (dest != null)
                 scheduler.store().ensure(StartQueueJob.CODE, StartQueueJob.KEY,
                         "Coda degli avvii /EWF/START_Q (" + dest + ")", "every 30s", "Europe/Rome", true, Map.of("batch", "50"));
+            if (s4 != null)
+                scheduler.store().ensure(PurchaseOrderPollJob.CODE, PurchaseOrderPollJob.KEY,
+                        "OdA modificati in S/4 Public (" + s4.backendCode() + ")", "every 1m", "Europe/Rome", true,
+                        Map.of("batch", "50"));
             scheduler.store().ensure(NotifyJob.CODE, NotifyJob.KEY, "Avvisi immediati dei task",
                     "every 1m", "Europe/Rome", true, Map.of());
             scheduler.store().ensure(DigestJob.CODE, DigestJob.KEY, "Riepilogo periodico delle attivita'",
@@ -93,10 +109,13 @@ public final class JobHost implements ServletContextListener {
             scheduler.store().ensure(MailSendJob.CODE, MailSendJob.KEY, "Spedizione delle mail in coda",
                     "every 1m", "Europe/Rome", true, Map.of("batch", "50"));
 
-            startQueueActive = dest != null;
+            startQueueActive = dest != null || s4 != null;
+            startJobCode = s4 != null ? PurchaseOrderPollJob.CODE : StartQueueJob.CODE;
             active = this;
             System.out.println("[JobHost] Job avviati sul nodo " + scheduler.node()
-                    + (dest == null ? " - coda degli avvii NON attiva (SAP non collegato)" : " - coda degli avvii da " + dest)
+                    + (dest == null ? "" : " - coda degli avvii da " + dest)
+                    + (s4 == null ? "" : " - OdA da S/4 Public " + s4.backendCode())
+                    + (dest == null && s4 == null ? " - nessun sistema di origine collegato" : "")
                     + (smtp ? "" : " - EONE_SMTP_HOST mancante: le mail restano in coda")
                     + (baseUrl.isBlank() ? " - EWF_APP_BASE_URL mancante: mail senza link" : ""));
         } catch (RuntimeException | LinkageError e) {
@@ -128,13 +147,13 @@ public final class JobHost implements ServletContextListener {
             // compare un nuovo giro concluso nello storico (confronto per valori, non per orologi dei nodi).
             Instant idleBefore = lastIdle(h);
             long runBefore = lastRunId(h);
-            h.scheduler.store().runNow(StartQueueJob.CODE);
+            h.scheduler.store().runNow(h.startJobCode);
             long deadline = System.currentTimeMillis() + maxWait.toMillis();
             while (System.currentTimeMillis() < deadline) {
                 Thread.sleep(300);
                 Instant idle = lastIdle(h);
                 if (idle != null && !idle.equals(idleBefore)) return QueueRead.DONE;   // niente di nuovo in coda
-                List<JobRun> last = h.scheduler.store().runs(StartQueueJob.CODE, 1);
+                List<JobRun> last = h.scheduler.store().runs(h.startJobCode, 1);
                 if (!last.isEmpty() && last.get(0).id() != runBefore && last.get(0).endedAt() != null)
                     return Set.of("ERROR", "FAILED", "ABORTED").contains(last.get(0).status()) ? QueueRead.FAILED : QueueRead.DONE;
             }
@@ -149,11 +168,11 @@ public final class JobHost implements ServletContextListener {
     }
 
     private static Instant lastIdle(JobHost h) {
-        return h.scheduler.store().definition(StartQueueJob.CODE).map(JobDefinition::lastIdleAt).orElse(null);
+        return h.scheduler.store().definition(h.startJobCode).map(JobDefinition::lastIdleAt).orElse(null);
     }
 
     private static long lastRunId(JobHost h) {
-        List<JobRun> r = h.scheduler.store().runs(StartQueueJob.CODE, 1);
+        List<JobRun> r = h.scheduler.store().runs(h.startJobCode, 1);
         return r.isEmpty() ? -1 : r.get(0).id();
     }
 

@@ -227,6 +227,10 @@ public class MobileTaskUI extends PageBean implements Serializable {
             Statusbar.outputError("Scegliere come proseguire");
             return;
         }
+        if (t.commentRequired(actionRejects()) && (m_note == null || m_note.isBlank())) {
+            Statusbar.outputError("Scrivere il commento: per questa azione e' obbligatorio");
+            return;
+        }
         try {
             Object r = switch (m_action) {
                 case APPROVE -> svc().approve(uid(), t.taskId(), m_note, t.rowVersion());
@@ -264,7 +268,21 @@ public class MobileTaskUI extends PageBean implements Serializable {
     public boolean isCanAct() { return myTask() != null && myTask().webActionable(); }
     public boolean isPlainDecision() { return isDetailMode() && isCanAct() && m_options.isEmpty(); }
     public boolean isHasOptions() { return isDetailMode() && isCanAct() && !m_options.isEmpty(); }
-    public boolean isSapGuiOnly() { return isDetailMode() && myTask() != null && !myTask().webActionable(); }
+    public boolean isSapGuiOnly() { return isDetailMode() && myTask() != null && !myTask().webActionable() && !myTask().interactive(); }
+    /** Task INTERACTIVE (S/4 Public, D23): si decide nella My Inbox, eWF chiude il task quando rileva la decisione. */
+    public boolean isInteractive() { return isDetailMode() && myTask() != null && myTask().interactive(); }
+    public boolean isInboxAvailable() { return isInteractive() && it.eone.ewf.ewfserver.app.EwfApp.get().s4InboxUrl().isPresent(); }
+    public String getInteractiveText() {
+        String doc = m_detail == null ? "" : m_detail.header().documentKey();
+        return "Questa attivita' si completa in SAP: apri la My Inbox, cerca il documento " + doc
+                + " e decidi li'. eWF chiude l'attivita' da solo appena rileva la decisione (entro qualche minuto).";
+    }
+    public String getInteractiveDocument() { return m_detail == null ? "" : m_detail.header().documentKey(); }
+    public void onOpenInbox(ActionEvent ae) {
+        java.util.Optional<String> url = it.eone.ewf.ewfserver.app.EwfApp.get().s4InboxUrl();
+        if (url.isEmpty()) { Statusbar.outputError("Indirizzo della My Inbox non configurato"); return; }
+        org.eclnt.jsfserver.defaultscreens.Client.instance().openURLInOwnBrowser(url.get(), "_blank");
+    }
     public boolean isNoTask() { return isDetailMode() && myTask() == null; }
     public boolean isChoosing() { return m_action == Action.CHOOSE; }
     public boolean isHasSheet() { return isDetailMode() && !m_sheets.isEmpty(); }
@@ -318,8 +336,24 @@ public class MobileTaskUI extends PageBean implements Serializable {
         };
     }
     public String getConfirmBg() { return m_action == Action.REJECT ? "#B71C1C" : "#1565C0"; }
+    /** L'azione in corso respinge? (Respingi, oppure un'opzione che respinge.) */
+    private boolean actionRejects() {
+        if (m_action == Action.REJECT) return true;
+        if (m_action != Action.CHOOSE || m_option == null || myTask() == null) return false;
+        return myTask().options().stream().anyMatch(o -> o.code().equals(m_option) && o.reject());
+    }
+
     public String getNoteHint() {
-        return m_action == Action.REJECT ? "Commento (consigliato: spiega il motivo del rifiuto)" : "Commento (facoltativo)";
+        MyTask t = myTask();
+        if (t == null || m_action == null) return "Commento";
+        if (m_action == Action.CHOOSE && m_option == null) return "Commento";
+        return t.commentRequired(actionRejects()) ? "Commento (obbligatorio)" : "Commento (facoltativo)";
+    }
+
+    /** Il campo commento si mostra salvo che il task dica "non richiesto" per questa azione. */
+    public boolean isNoteVisible() {
+        MyTask t = myTask();
+        return isActionMode() && t != null && !t.commentHidden(actionRejects());
     }
 
     public String getAttachmentsText() {

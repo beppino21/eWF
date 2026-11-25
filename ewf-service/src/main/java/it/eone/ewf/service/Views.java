@@ -98,7 +98,15 @@ public final class Views {
      */
     public record MyTask(long taskId, String taskText, Reason reason, String forWhom, boolean webActionable,
                          List<Option> options, List<Function> functions, int rowVersion,
-                         String commentOnApprove, String commentOnReject) {
+                         String commentOnApprove, String commentOnReject, String interaction) {
+        public MyTask(long taskId, String taskText, Reason reason, String forWhom, boolean webActionable,
+                      List<Option> options, List<Function> functions, int rowVersion,
+                      String commentOnApprove, String commentOnReject) {
+            this(taskId, taskText, reason, forWhom, webActionable, options, functions, rowVersion,
+                    commentOnApprove, commentOnReject, webActionable ? "WEB" : "SAPGUI_ONLY");
+        }
+        /** INTERACTIVE: si decide nel sistema di origine (es. My Inbox di S/4), eWF chiude il task da solo. */
+        public boolean interactive() { return "INTERACTIVE".equals(interaction); }
         public String commentFor(boolean reject) { return reject ? commentOnReject : commentOnApprove; }
         public boolean commentRequired(boolean reject) { return "REQUIRED".equals(commentFor(reject)); }
         public boolean commentHidden(boolean reject) { return "NONE".equals(commentFor(reject)); }
